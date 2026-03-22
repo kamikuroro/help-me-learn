@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.log
+audio/full/
+audio/summary/
+audio/messages/
+audio/digest/
+.DS_Store
