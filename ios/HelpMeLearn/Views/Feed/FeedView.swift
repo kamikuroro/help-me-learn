@@ -60,10 +60,12 @@ struct FeedView: View {
                                 .keyboardType(.URL)
                         }
 
-                        Section("Paste Content (optional)") {
+                        Section {
                             TextField("Title", text: $ingestTitle)
                             TextEditor(text: $ingestContent)
                                 .frame(minHeight: 120)
+                        } header: {
+                            Text("Paste Content (optional)")
                         } footer: {
                             Text("For sites that block scraping (e.g. WeChat), paste the article text here.")
                         }
