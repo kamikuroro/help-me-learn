@@ -6,11 +6,14 @@ import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { closePool, healthCheck } from './services/db.service.js';
 import { ingestionQueue } from './jobs/ingest.job.js';
+import { ttsQueue } from './jobs/tts.job.js';
+import { digestQueue } from './jobs/digest.job.js';
 
 import ingestRoutes from './routes/ingest.routes.js';
 import sourcesRoutes from './routes/sources.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import chatRoutes from './routes/chat.routes.js';
+import audioRoutes from './routes/audio.routes.js';
 
 const app = express();
 
@@ -24,7 +27,11 @@ app.get('/api/health', async (_req, res) => {
   res.status(dbHealthy ? 200 : 503).json({
     status: dbHealthy ? 'ok' : 'degraded',
     db: dbHealthy ? 'connected' : 'disconnected',
-    queues: { ingestion: ingestionQueue.getStats() },
+    queues: {
+      ingestion: ingestionQueue.getStats(),
+      tts: ttsQueue.getStats(),
+      digest: digestQueue.getStats(),
+    },
     timestamp: new Date().toISOString(),
   });
 });
@@ -33,6 +40,7 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/ingest', authMiddleware, ingestRoutes);
 app.use('/api/sources', authMiddleware, sourcesRoutes);
 app.use('/api/search', authMiddleware, searchRoutes);
+app.use('/api/audio', authMiddleware, audioRoutes);
 app.use('/api', authMiddleware, chatRoutes);
 
 // Error handling
@@ -51,6 +59,8 @@ async function shutdown(signal: string) {
   logger.info({ signal }, 'Shutting down gracefully');
   server.close();
   await ingestionQueue.drain(30_000);
+  await ttsQueue.drain(30_000);
+  await digestQueue.drain(30_000);
   await closePool();
   process.exit(0);
 }
