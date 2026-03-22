@@ -1,6 +1,6 @@
 import express from 'express';
 import { config } from './config.js';
-import { logger } from './logger.js';
+import { logger, logBroadcast } from './logger.js';
 import { requestLogger } from './middleware/request-logger.js';
 import { authMiddleware } from './middleware/auth.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -33,6 +33,25 @@ app.get('/api/health', async (_req, res) => {
       digest: digestQueue.getStats(),
     },
     timestamp: new Date().toISOString(),
+  });
+});
+
+// SSE log stream (auth-protected)
+app.get('/api/logs/stream', authMiddleware, (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+
+  const onLog = (line: string) => {
+    res.write(`data: ${line}\n\n`);
+  };
+
+  logBroadcast.on('log', onLog);
+
+  req.on('close', () => {
+    logBroadcast.off('log', onLog);
   });
 });
 

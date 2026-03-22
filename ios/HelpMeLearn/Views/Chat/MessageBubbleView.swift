@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct MessageBubbleView: View {
     let message: Message
@@ -10,10 +11,18 @@ struct MessageBubbleView: View {
 
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
                 Text(message.content)
+                    .textSelection(.enabled)
                     .padding(12)
                     .background(message.isUser ? Color.blue : Color(.systemGray5))
                     .foregroundStyle(message.isUser ? .white : .primary)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .contextMenu {
+                        Button(action: {
+                            UIPasteboard.general.string = message.content
+                        }) {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                    }
 
                 HStack(spacing: 8) {
                     if !message.isUser, let audioPath = message.audioPath {

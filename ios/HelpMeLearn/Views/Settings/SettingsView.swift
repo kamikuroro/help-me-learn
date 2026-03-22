@@ -48,6 +48,14 @@ struct SettingsView: View {
                     Toggle("Audio Chat Responses", isOn: $settings.chatAudioEnabled)
                 }
 
+                Section("Developer") {
+                    NavigationLink {
+                        LogsView()
+                    } label: {
+                        Label("Server Logs", systemImage: "terminal")
+                    }
+                }
+
                 Section("About") {
                     LabeledContent("Version", value: "0.1.0")
                 }
