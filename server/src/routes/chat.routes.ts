@@ -5,6 +5,9 @@ import { invokeClaude } from '../services/claude.service.js';
 import { hybridSearch, expandChunksWithNeighbors, getSourceContext } from '../services/rag.service.js';
 import { ValidationError, SourceNotFoundError, ConversationNotFoundError } from '../types/errors.js';
 import { logger } from '../logger.js';
+import { generateTTS } from '../services/tts.service.js';
+import { config } from '../config.js';
+import path from 'path';
 
 const router = Router();
 
@@ -128,11 +131,26 @@ If the context doesn't contain relevant information, say so honestly. Always cit
       )
     : [];
 
+  let audioUrl: string | null = null;
+  if (tts) {
+    try {
+      const audioPath = path.join(config.audio.dir, 'messages', `${saved!.id}.mp3`);
+      await generateTTS(response, audioPath);
+      await query(
+        'UPDATE messages SET audio_path = $1 WHERE id = $2',
+        [audioPath, saved!.id],
+      );
+      audioUrl = `/api/audio/messages/${saved!.id}`;
+    } catch (err) {
+      logger.warn({ err, message_id: saved!.id }, 'TTS for chat response failed');
+    }
+  }
+
   res.json({
     message_id: saved!.id,
     conversation_id: convId,
     content: response,
-    audio_url: null, // TTS handled in Phase 3
+    audio_url: audioUrl,
     sources_referenced: sourcesReferenced,
   });
 });
