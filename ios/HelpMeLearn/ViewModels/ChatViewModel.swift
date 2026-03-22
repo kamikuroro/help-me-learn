@@ -30,7 +30,8 @@ final class ChatViewModel {
             let response = try await APIClient.shared.sendMessage(
                 text,
                 sourceId: sourceId,
-                conversationId: conversationId
+                conversationId: conversationId,
+                tts: SettingsService.shared.chatAudioEnabled
             )
             conversationId = response.conversationId
 

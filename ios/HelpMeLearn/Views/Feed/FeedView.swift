@@ -4,6 +4,8 @@ struct FeedView: View {
     @State private var viewModel = FeedViewModel()
     @State private var showIngestSheet = false
     @State private var ingestURL = ""
+    @State private var ingestTitle = ""
+    @State private var ingestContent = ""
 
     var body: some View {
         NavigationStack {
@@ -52,20 +54,39 @@ struct FeedView: View {
             .sheet(isPresented: $showIngestSheet) {
                 NavigationStack {
                     Form {
-                        TextField("URL", text: $ingestURL)
-                            .textInputAutocapitalization(.never)
-                            .keyboardType(.URL)
+                        Section {
+                            TextField("URL", text: $ingestURL)
+                                .textInputAutocapitalization(.never)
+                                .keyboardType(.URL)
+                        }
+
+                        Section("Paste Content (optional)") {
+                            TextField("Title", text: $ingestTitle)
+                            TextEditor(text: $ingestContent)
+                                .frame(minHeight: 120)
+                        } footer: {
+                            Text("For sites that block scraping (e.g. WeChat), paste the article text here.")
+                        }
                     }
-                    .navigationTitle("Add URL")
+                    .navigationTitle("Add Source")
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { showIngestSheet = false }
+                            Button("Cancel") {
+                                showIngestSheet = false
+                                ingestURL = ""
+                                ingestTitle = ""
+                                ingestContent = ""
+                            }
                         }
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Add") {
                                 Task {
-                                    await viewModel.ingestURL(ingestURL)
+                                    let content = ingestContent.trimmingCharacters(in: .whitespaces).isEmpty ? nil : ingestContent
+                                    let title = ingestTitle.trimmingCharacters(in: .whitespaces).isEmpty ? nil : ingestTitle
+                                    await viewModel.ingestURL(ingestURL, content: content, title: title)
                                     ingestURL = ""
+                                    ingestTitle = ""
+                                    ingestContent = ""
                                     showIngestSheet = false
                                 }
                             }
@@ -73,7 +94,7 @@ struct FeedView: View {
                         }
                     }
                 }
-                .presentationDetents([.medium])
+                .presentationDetents([.large])
             }
             .task { await viewModel.loadSources() }
         }

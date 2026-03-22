@@ -44,10 +44,14 @@ struct SourceDetail: Codable {
     let category: String?
     let tags: [String]
     let status: String
+    let audioFullPath: String?
+    let audioSummaryPath: String?
 
     enum CodingKeys: String, CodingKey {
         case id, url, title, summary, category, tags, status
         case rawContent = "raw_content"
+        case audioFullPath = "audio_full_path"
+        case audioSummaryPath = "audio_summary_path"
     }
 }
 

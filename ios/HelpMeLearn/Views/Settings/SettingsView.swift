@@ -44,6 +44,8 @@ struct SettingsView: View {
                     }
 
                     Toggle("Prefer Summary Audio", isOn: $settings.preferSummaryAudio)
+
+                    Toggle("Audio Chat Responses", isOn: $settings.chatAudioEnabled)
                 }
 
                 Section("About") {

@@ -8,7 +8,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: "NYXF743Q4Y"
 
 targets:
   HelpMeLearn:
@@ -33,6 +33,10 @@ targets:
     platform: iOS
     sources:
       - ShareExtension
+      - path: HelpMeLearn/Services/APIClient.swift
+      - path: HelpMeLearn/Services/SettingsService.swift
+      - path: HelpMeLearn/Models/Source.swift
+      - path: HelpMeLearn/Models/Conversation.swift
     settings:
       base:
         INFOPLIST_FILE: ShareExtension/Info.plist

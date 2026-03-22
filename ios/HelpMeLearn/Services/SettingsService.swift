@@ -26,12 +26,17 @@ final class SettingsService {
         didSet { defaults.set(preferSummaryAudio, forKey: "preferSummaryAudio") }
     }
 
+    var chatAudioEnabled: Bool {
+        didSet { defaults.set(chatAudioEnabled, forKey: "chatAudioEnabled") }
+    }
+
     private init() {
         self.defaults = UserDefaults(suiteName: appGroupId) ?? .standard
         self.serverURL = defaults.string(forKey: "serverURL") ?? "http://localhost:3741"
         self.authToken = Self.loadFromKeychain(service: "com.helpmelearn.app", key: "authToken") ?? ""
         self.playbackSpeed = defaults.float(forKey: "playbackSpeed").nonZero ?? 1.0
         self.preferSummaryAudio = defaults.bool(forKey: "preferSummaryAudio")
+        self.chatAudioEnabled = defaults.bool(forKey: "chatAudioEnabled")
     }
 
     var isConfigured: Bool {

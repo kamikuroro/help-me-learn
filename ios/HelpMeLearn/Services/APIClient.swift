@@ -50,9 +50,11 @@ final class APIClient {
         let _: EmptyResponse = try await delete("/api/sources/\(id)")
     }
 
-    func ingestURL(_ url: String, tags: [String]? = nil) async throws -> IngestResponse {
+    func ingestURL(_ url: String, tags: [String]? = nil, content: String? = nil, title: String? = nil) async throws -> IngestResponse {
         var body: [String: Any] = ["url": url]
         if let tags { body["tags"] = tags }
+        if let content { body["content"] = content }
+        if let title { body["title"] = title }
         return try await post("/api/ingest", body: body)
     }
 
@@ -65,10 +67,11 @@ final class APIClient {
         return try await get("/api/search?q=\(encoded)&limit=\(limit)")
     }
 
-    func sendMessage(_ message: String, sourceId: Int? = nil, conversationId: Int? = nil) async throws -> ChatResponse {
+    func sendMessage(_ message: String, sourceId: Int? = nil, conversationId: Int? = nil, tts: Bool = false) async throws -> ChatResponse {
         var body: [String: Any] = ["message": message]
         if let sourceId { body["source_id"] = sourceId }
         if let conversationId { body["conversation_id"] = conversationId }
+        if tts { body["tts"] = true }
         return try await post("/api/chat", body: body)
     }
 

@@ -41,9 +41,9 @@ final class FeedViewModel {
         }
     }
 
-    func ingestURL(_ url: String) async {
+    func ingestURL(_ url: String, content: String? = nil, title: String? = nil) async {
         do {
-            _ = try await APIClient.shared.ingestURL(url)
+            _ = try await APIClient.shared.ingestURL(url, content: content, title: title)
             await loadSources()
         } catch {
             self.error = error.localizedDescription

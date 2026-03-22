@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MessageBubbleView: View {
     let message: Message
+    @State private var audioPlayer = AudioPlayerService.shared
 
     var body: some View {
         HStack {
@@ -14,13 +15,33 @@ struct MessageBubbleView: View {
                     .foregroundStyle(message.isUser ? .white : .primary)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                Text(formatTime(message.createdAt))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 8) {
+                    if !message.isUser, let audioPath = message.audioPath {
+                        Button(action: {
+                            if isPlayingThis {
+                                audioPlayer.togglePlayPause()
+                            } else {
+                                audioPlayer.playFromURL(audioPath, id: message.id, type: "message", title: "Chat Response")
+                            }
+                        }) {
+                            Image(systemName: isPlayingThis ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                        }
+                    }
+
+                    Text(formatTime(message.createdAt))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             if !message.isUser { Spacer(minLength: 60) }
         }
+    }
+
+    private var isPlayingThis: Bool {
+        audioPlayer.currentSourceId == message.id && audioPlayer.currentType == "message"
     }
 
     private func formatTime(_ isoString: String) -> String {

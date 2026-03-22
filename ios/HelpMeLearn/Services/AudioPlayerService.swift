@@ -95,6 +95,31 @@ final class AudioPlayerService {
         updateNowPlayingInfo()
     }
 
+    func playFromURL(_ urlString: String, id: Int, type: String, title: String) {
+        let baseURL = SettingsService.shared.serverURL
+        let token = SettingsService.shared.authToken
+        guard let url = URL(string: "\(baseURL)\(urlString)") else { return }
+
+        let headers = ["Authorization": "Bearer \(token)"]
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        let item = AVPlayerItem(asset: asset)
+
+        if let player {
+            player.replaceCurrentItem(with: item)
+        } else {
+            player = AVPlayer(playerItem: item)
+        }
+
+        currentSourceId = id
+        currentType = type
+        currentTitle = title
+
+        setupTimeObserver()
+        player?.rate = playbackRate
+        isPlaying = true
+        updateNowPlayingInfo()
+    }
+
     func play() {
         player?.rate = playbackRate
         isPlaying = true

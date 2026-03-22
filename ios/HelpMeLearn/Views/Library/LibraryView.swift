@@ -23,7 +23,7 @@ struct LibraryView: View {
                     }
                 }
                 .padding(8)
-                .background(.quaternary)
+                .background(Color(.systemGray5))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .padding(.horizontal)
 
@@ -99,7 +99,7 @@ struct CategoryChip: View {
                 .font(.caption)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(isSelected ? .blue : .quaternary)
+                .background(isSelected ? .blue : Color(.systemGray5))
                 .foregroundStyle(isSelected ? .white : .primary)
                 .clipShape(Capsule())
         }

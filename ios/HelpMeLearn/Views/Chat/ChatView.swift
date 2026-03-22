@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatView: View {
     @State private var viewModel = ChatViewModel()
     @State private var inputText = ""
+    @FocusState private var isInputFocused: Bool
     var sourceId: Int?
     var sourceTitle: String?
 
@@ -29,6 +30,9 @@ struct ChatView: View {
                     }
                     .padding()
                 }
+                .onTapGesture {
+                    isInputFocused = false
+                }
                 .onChange(of: viewModel.messages.count) {
                     if let last = viewModel.messages.last {
                         withAnimation {
@@ -44,6 +48,7 @@ struct ChatView: View {
                 TextField("Ask a question...", text: $inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...5)
+                    .focused($isInputFocused)
 
                 Button(action: sendMessage) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -55,6 +60,14 @@ struct ChatView: View {
         }
         .navigationTitle(sourceTitle ?? (viewModel.chatType == "per_article" ? "Article Chat" : "Knowledge Base"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    isInputFocused = false
+                }
+            }
+        }
         .onAppear {
             viewModel.sourceId = sourceId
         }
@@ -72,6 +85,7 @@ struct ChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         inputText = ""
+        isInputFocused = false
         Task { await viewModel.sendMessage(text) }
     }
 }
