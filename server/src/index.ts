@@ -9,6 +9,8 @@ import { ingestionQueue } from './jobs/ingest.job.js';
 
 import ingestRoutes from './routes/ingest.routes.js';
 import sourcesRoutes from './routes/sources.routes.js';
+import searchRoutes from './routes/search.routes.js';
+import chatRoutes from './routes/chat.routes.js';
 
 const app = express();
 
@@ -30,6 +32,8 @@ app.get('/api/health', async (_req, res) => {
 // Auth-protected routes
 app.use('/api/ingest', authMiddleware, ingestRoutes);
 app.use('/api/sources', authMiddleware, sourcesRoutes);
+app.use('/api/search', authMiddleware, searchRoutes);
+app.use('/api', authMiddleware, chatRoutes);
 
 // Error handling
 app.use(errorHandler);
