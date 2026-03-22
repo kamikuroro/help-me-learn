@@ -1,0 +1,52 @@
+import Foundation
+
+@Observable
+final class FeedViewModel {
+    var sources: [Source] = []
+    var isLoading = false
+    var error: String?
+    private var total = 0
+
+    func loadSources() async {
+        isLoading = true
+        error = nil
+        do {
+            let response = try await APIClient.shared.listSources()
+            sources = response.data
+            total = response.total
+        } catch {
+            self.error = error.localizedDescription
+        }
+        isLoading = false
+    }
+
+    func refresh() async {
+        await loadSources()
+    }
+
+    func deleteSource(_ source: Source) async {
+        do {
+            try await APIClient.shared.deleteSource(id: source.id)
+            sources.removeAll { $0.id == source.id }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func generateAudio(sourceId: Int, type: String) async {
+        do {
+            try await APIClient.shared.generateAudio(sourceId: sourceId, type: type)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func ingestURL(_ url: String) async {
+        do {
+            _ = try await APIClient.shared.ingestURL(url)
+            await loadSources()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
