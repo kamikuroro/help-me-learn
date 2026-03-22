@@ -134,20 +134,8 @@ Answer the user's questions about this article. Be specific, cite sections when 
       )
     : [];
 
-  let audioUrl: string | null = null;
-  if (tts) {
-    try {
-      const audioPath = path.join(config.audio.dir, 'messages', `${saved!.id}.mp3`);
-      await generateTTS(response, audioPath);
-      await query(
-        'UPDATE messages SET audio_path = $1 WHERE id = $2',
-        [audioPath, saved!.id],
-      );
-      audioUrl = `/api/audio/messages/${saved!.id}`;
-    } catch (err) {
-      logger.warn({ err, message_id: saved!.id }, 'TTS for chat response failed');
-    }
-  }
+  // Return text response immediately
+  const audioUrl = tts ? `/api/audio/messages/${saved!.id}` : null;
 
   res.json({
     message_id: saved!.id,
@@ -156,6 +144,16 @@ Answer the user's questions about this article. Be specific, cite sections when 
     audio_url: audioUrl,
     sources_referenced: sourcesReferenced,
   });
+
+  // Generate TTS in background (non-blocking) after response is sent
+  if (tts) {
+    const messageId = saved!.id;
+    const audioPath = path.join(config.audio.dir, 'messages', `${messageId}.mp3`);
+    generateTTS(response, audioPath)
+      .then(() => query('UPDATE messages SET audio_path = $1 WHERE id = $2', [audioPath, messageId]))
+      .then(() => logger.info({ event: 'chat_tts_complete', message_id: messageId }))
+      .catch((err) => logger.warn({ err, message_id: messageId }, 'TTS for chat response failed'));
+  }
 });
 
 // GET /api/conversations — List conversations
