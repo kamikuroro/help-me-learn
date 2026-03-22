@@ -11,6 +11,8 @@ const router = Router();
 const ingestSchema = z.object({
   url: z.string(),
   tags: z.array(z.string()).optional(),
+  content: z.string().optional(),
+  title: z.string().optional(),
 });
 
 // POST /api/ingest — Submit a URL for ingestion
@@ -20,14 +22,14 @@ router.post('/', async (req: Request, res: Response) => {
     throw new ValidationError(`Invalid request: ${parsed.error.message}`);
   }
 
-  const { url, tags } = parsed.data;
+  const { url, tags, content, title } = parsed.data;
   if (!isValidUrl(url)) {
     throw new ValidationError('Invalid URL: must be an http or https URL');
   }
 
   try {
     const sourceId = await createSource(url, tags);
-    ingestionQueue.add({ sourceId });
+    ingestionQueue.add({ sourceId, rawContent: content, rawTitle: title });
 
     res.status(202).json({
       id: sourceId,

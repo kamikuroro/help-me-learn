@@ -33,6 +33,17 @@ Response (202): `{"id": 1, "status": "pending", "message": "Ingestion started"}`
 
 Ingestion takes 30-60 seconds. Tell the user it's being processed. If they ask about status later, check it.
 
+**For sites that block scraping (WeChat, paywalled sites, etc.):** If ingestion fails due to fetch timeout or the server can't extract content, read the article yourself using your browser/web access, then re-submit with the content included:
+
+```
+POST /api/ingest
+Content-Type: application/json
+
+{"url": "https://mp.weixin.qq.com/s/xxx", "title": "Article Title", "content": "Full article text..."}
+```
+
+When `content` is provided, the server skips the web scraper and goes straight to summarization + embedding. This is the standard approach for WeChat (mp.weixin.qq.com) URLs — always read them yourself and submit with content.
+
 ### 2. Check Ingestion Status
 
 ```
