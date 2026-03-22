@@ -141,6 +141,35 @@ POST /api/sources/{id}/retry
 
 Only works for sources in `failed` status.
 
+### 10. Generate Audio for an Article
+
+Trigger TTS generation (async — takes 10-60 seconds depending on length).
+
+```
+POST /api/audio/generate/{source_id}
+Content-Type: application/json
+
+{"type": "summary"}
+```
+
+`type` is either `summary` (short, 2-5 min) or `full` (entire article).
+
+Response (202): `{"message": "TTS generation started for summary", "source_id": 3, "type": "summary"}`
+
+### 11. Get Audio File
+
+After generation completes, download the audio as an MP3 file:
+
+```
+GET /api/audio/summary/{source_id}    — summary audio
+GET /api/audio/full/{source_id}       — full article audio
+GET /api/audio/messages/{message_id}  — chat response audio
+```
+
+Returns `audio/mpeg` binary data. Send this to the user as an audio attachment.
+
+To check if audio is ready, list or get the source — `audio_summary_path` or `audio_full_path` will be non-null when ready.
+
 ## Behavior Guidelines
 
 - **Be proactive about saving**: If the user shares a URL in conversation, offer to save it to their KB.
@@ -149,3 +178,5 @@ Only works for sources in `failed` status.
 - **Cite sources**: When answering from the KB, mention the article title so the user knows where the info came from.
 - **Handle async gracefully**: Ingestion takes time. Say "Got it, saving that article. I'll let you know when it's ready" rather than making them wait.
 - **Don't guess source IDs**: Search or list first to find the right source before operating on it.
+- **Offer audio when relevant**: If the user asks to "read me" or "listen to" an article, generate summary audio and send it. Prefer summary over full — it's shorter and cheaper. Only generate full audio if explicitly asked.
+- **Audio is async**: Generate first, then poll the source to check if `audio_summary_path` is set, then fetch and send the file. Tell the user "Generating audio, one moment..." while waiting.
