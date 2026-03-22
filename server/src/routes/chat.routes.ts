@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod/v4';
+import crypto from 'crypto';
 import { query, queryOne, queryMany } from '../services/db.service.js';
 import { invokeClaude } from '../services/claude.service.js';
 import { hybridSearch, expandChunksWithNeighbors, getSourceContext } from '../services/rag.service.js';
@@ -28,19 +29,25 @@ router.post('/chat', async (req: Request, res: Response) => {
   const { message, source_id, conversation_id, tts } = parsed.data;
   const chatType = source_id ? 'per_article' : 'cross_kb';
 
-  // Get or create conversation
+  // Get or create conversation, resolving session ID
   let convId = conversation_id;
+  let claudeSessionId: string | null = null;
+  let isNewConversation = false;
+
   if (convId) {
-    const conv = await queryOne<{ id: number; type: string }>(
-      'SELECT id, type FROM conversations WHERE id = $1',
+    const conv = await queryOne<{ id: number; type: string; claude_session_id: string | null }>(
+      'SELECT id, type, claude_session_id FROM conversations WHERE id = $1',
       [convId],
     );
     if (!conv) throw new ConversationNotFoundError(convId);
+    claudeSessionId = conv.claude_session_id;
   } else {
+    isNewConversation = true;
+    claudeSessionId = crypto.randomUUID();
     const conv = await queryOne<{ id: number }>(
-      `INSERT INTO conversations (source_id, type, title)
-       VALUES ($1, $2, $3) RETURNING id`,
-      [source_id || null, chatType, message.slice(0, 100)],
+      `INSERT INTO conversations (source_id, type, title, claude_session_id)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [source_id || null, chatType, message.slice(0, 100), claudeSessionId],
     );
     convId = conv!.id;
   }
@@ -51,15 +58,19 @@ router.post('/chat', async (req: Request, res: Response) => {
     [convId, message],
   );
 
-  // Build context and generate response
-  let systemPrompt: string;
+  // Build context
+  let systemPrompt: string | undefined;
   let citedSourceIds: number[] = [];
+  let promptText = message;
 
   if (source_id) {
     const source = await getSourceContext(source_id);
     if (!source) throw new SourceNotFoundError(source_id);
+    citedSourceIds = [source_id];
 
-    systemPrompt = `You are a helpful assistant discussing a specific article. Here is the article:
+    // System prompt only on first message — session remembers it
+    if (isNewConversation) {
+      systemPrompt = `You are a helpful assistant discussing a specific article. Here is the article:
 
 Title: ${source.title}
 URL: ${source.url}
@@ -71,41 +82,33 @@ Full Content:
 ${source.content}
 
 Answer the user's questions about this article. Be specific, cite sections when relevant.`;
-    citedSourceIds = [source_id];
+    }
   } else {
+    // Cross-KB: fresh RAG context per turn, included in the message
     const hits = await hybridSearch(message, 10);
     const context = await expandChunksWithNeighbors(hits);
     citedSourceIds = [...new Set(hits.map((h) => h.source_id))];
 
-    systemPrompt = `You are a helpful assistant with access to a personal knowledge base. Use the following retrieved context to answer the user's question. Cite sources when you use information from them.
+    if (isNewConversation) {
+      systemPrompt = `You are a helpful assistant with access to a personal knowledge base. When provided with retrieved context, use it to answer questions. Cite sources when you use information from them. If the context doesn't contain relevant information, say so honestly.`;
+    }
 
-${context}
-
-If the context doesn't contain relevant information, say so honestly. Always cite which source you're drawing from.`;
+    // Prepend RAG context to the user message so each turn gets fresh results
+    if (context) {
+      promptText = `[Retrieved context for this query]\n${context}\n\n[User question]\n${message}`;
+    }
   }
 
-  // Fetch conversation history for multi-turn context
-  const history = await queryMany<{ role: string; content: string }>(
-    `SELECT role, content FROM messages
-     WHERE conversation_id = $1
-     ORDER BY created_at
-     LIMIT 20`,
-    [convId],
-  );
-
-  const historyText = history
-    .slice(0, -1)
-    .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-    .join('\n\n');
-
-  const fullPrompt = historyText
-    ? `Previous conversation:\n${historyText}\n\nUser: ${message}`
-    : message;
-
+  // Invoke Claude with session-based multi-turn
   const start = Date.now();
   const response = await invokeClaude({
-    prompt: fullPrompt,
+    prompt: promptText,
     systemPrompt,
+    ...(claudeSessionId
+      ? isNewConversation
+        ? { sessionId: claudeSessionId }
+        : { resumeSessionId: claudeSessionId }
+      : {}),
   });
   const duration = Date.now() - start;
 

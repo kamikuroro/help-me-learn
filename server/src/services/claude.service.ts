@@ -32,6 +32,10 @@ export interface ClaudeOptions {
   model?: string;
   outputFormat?: 'text' | 'json';
   timeoutMs?: number;
+  /** UUID for a new session (first message). Mutually exclusive with resumeSessionId. */
+  sessionId?: string;
+  /** UUID of an existing session to resume (subsequent messages). */
+  resumeSessionId?: string;
 }
 
 export async function invokeClaude(options: ClaudeOptions): Promise<string> {
@@ -41,6 +45,8 @@ export async function invokeClaude(options: ClaudeOptions): Promise<string> {
     model = config.claude.model,
     outputFormat = 'text',
     timeoutMs = config.claude.timeoutMs,
+    sessionId,
+    resumeSessionId,
   } = options;
 
   const args = ['-p', '--model', model];
@@ -49,6 +55,11 @@ export async function invokeClaude(options: ClaudeOptions): Promise<string> {
   }
   if (systemPrompt) {
     args.push('--system-prompt', systemPrompt);
+  }
+  if (resumeSessionId) {
+    args.push('-r', resumeSessionId);
+  } else if (sessionId) {
+    args.push('--session-id', sessionId);
   }
 
   await acquireSemaphore();

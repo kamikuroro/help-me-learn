@@ -72,13 +72,14 @@ CREATE INDEX idx_chunks_source ON chunks (source_id);
 -- Conversations & Messages
 -- ============================================================
 CREATE TABLE conversations (
-    id         SERIAL PRIMARY KEY,
-    source_id  INTEGER REFERENCES sources(id) ON DELETE SET NULL,
-    title      TEXT,
-    type       TEXT NOT NULL DEFAULT 'per_article'
-               CHECK (type IN ('per_article', 'cross_kb')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                SERIAL PRIMARY KEY,
+    source_id         INTEGER REFERENCES sources(id) ON DELETE SET NULL,
+    title             TEXT,
+    type              TEXT NOT NULL DEFAULT 'per_article'
+                      CHECK (type IN ('per_article', 'cross_kb')),
+    claude_session_id UUID,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE messages (
