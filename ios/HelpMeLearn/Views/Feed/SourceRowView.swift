@@ -42,6 +42,14 @@ struct SourceRowView: View {
 
             if source.isReady {
                 HStack(spacing: 12) {
+                    // Read article button
+                    NavigationLink {
+                        ArticleDetailView(sourceId: source.id, sourceTitle: source.title)
+                    } label: {
+                        Label("Read", systemImage: "book")
+                            .font(.caption)
+                    }
+
                     // Summary audio button
                     if source.hasSummaryAudio {
                         Button(action: {
