@@ -7,6 +7,7 @@ import { normalizeUrl } from '../utils/url.js';
 import { countWords } from '../utils/text.js';
 import { withRetry } from '../utils/retry.js';
 import { DuplicateSourceError, IngestionFailedError } from '../types/errors.js';
+import { generateEmbeddings } from './embedding.service.js';
 import crypto from 'crypto';
 
 interface SummarizationResult {
@@ -45,11 +46,21 @@ export async function createSource(url: string, userTags?: string[]): Promise<nu
 /**
  * Run the full ingestion pipeline for a source.
  */
-export async function runIngestionPipeline(sourceId: number): Promise<void> {
+export async function runIngestionPipeline(sourceId: number, rawContent?: string, rawTitle?: string): Promise<void> {
   try {
-    // Step 1: Extract content via Jina Reader
-    await updateStatus(sourceId, 'extracting');
-    const { content, title } = await fetchContent(sourceId);
+    // Step 1: Extract content — use provided content or fetch via Jina Reader
+    let content: string;
+    let title: string;
+    if (rawContent) {
+      content = rawContent;
+      title = rawTitle || '';
+      logger.info({ event: 'ingest_step', source_id: sourceId, step: 'content_provided', status: 'success' });
+    } else {
+      await updateStatus(sourceId, 'extracting');
+      const fetched = await fetchContent(sourceId);
+      content = fetched.content;
+      title = fetched.title;
+    }
 
     // Step 2: Summarize + categorize via Claude
     await updateStatus(sourceId, 'summarizing');
@@ -69,15 +80,24 @@ export async function runIngestionPipeline(sourceId: number): Promise<void> {
     await updateStatus(sourceId, 'chunking');
     const chunks = chunkText(content);
 
-    // Step 4: Store chunks with embeddings
+    // Step 4: Generate embeddings via Jina AI
     await updateStatus(sourceId, 'embedding');
-    for (const chunk of chunks) {
+    const validChunks = chunks.filter((c) => c.content.trim().length >= 10);
+    const embeddings = await generateEmbeddings(validChunks.map((c) => c.content));
+
+    // Step 5: Store chunks with embeddings
+    for (let i = 0; i < validChunks.length; i++) {
+      const chunk = validChunks[i];
+      const vector = embeddings[i];
+      const vectorLiteral = `[${vector.join(',')}]`;
+
       await query(
         `INSERT INTO chunks (source_id, chunk_index, content, token_count, embedding)
-         VALUES ($1, $2, $3, $4, embedding($3))`,
+         VALUES ($1, $2, $3, $4, '${vectorLiteral}'::vector(1024))`,
         [sourceId, chunk.index, chunk.content, chunk.tokenCount],
       );
     }
+    logger.info({ source_id: sourceId, total_chunks: chunks.length, embedded: validChunks.length });
 
     // Done
     await updateStatus(sourceId, 'ready');

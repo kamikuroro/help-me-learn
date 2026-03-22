@@ -1,4 +1,5 @@
 import { queryMany, queryOne } from './db.service.js';
+import { generateQueryEmbedding } from './embedding.service.js';
 import { logger } from '../logger.js';
 
 export interface SearchHit {
@@ -26,34 +27,42 @@ export async function hybridSearch(
 ): Promise<SearchHit[]> {
   const start = Date.now();
 
-  const categoryFilter = category
-    ? 'AND s.category = $2'
-    : '';
-  const params = category ? [queryText, category] : [queryText];
+  // Generate query embedding via Jina
+  const queryVector = await generateQueryEmbedding(queryText);
+  const vectorLiteral = `[${queryVector.join(',')}]`;
 
-  // Semantic search: top 20 by cosine distance
+  const categoryFilter = category
+    ? `AND s.category = $${category ? 1 : 0}`
+    : '';
+  const keywordParamOffset = category ? 2 : 1;
+  const keywordParams = category ? [queryText, category] : [queryText];
+
+  // Semantic search: top 20 by cosine distance (vector literal, safe — from Jina API, not user input)
+  const semanticCategoryFilter = category ? 'AND s.category = $1' : '';
+  const semanticParams = category ? [category] : [];
   const semanticResults = await queryMany<{ chunk_id: number; source_id: number; content: string; chunk_index: number; title: string; url: string }>(
     `SELECT c.id AS chunk_id, c.source_id, c.content, c.chunk_index,
             s.title, s.url
      FROM chunks c
      JOIN sources s ON s.id = c.source_id
-     WHERE s.status = 'ready' ${categoryFilter}
-     ORDER BY c.embedding <=> embedding($1)
+     WHERE s.status = 'ready' AND c.embedding IS NOT NULL ${semanticCategoryFilter}
+     ORDER BY c.embedding <=> '${vectorLiteral}'::vector(1024)
      LIMIT 20`,
-    params,
+    semanticParams,
   );
 
   // Keyword search: top 20 by ts_rank
+  const keywordCategoryFilter = category ? 'AND s.category = $2' : '';
   const keywordResults = await queryMany<{ chunk_id: number; source_id: number; content: string; chunk_index: number; title: string; url: string }>(
     `SELECT c.id AS chunk_id, c.source_id, c.content, c.chunk_index,
             s.title, s.url
      FROM chunks c
      JOIN sources s ON s.id = c.source_id
-     WHERE s.status = 'ready' ${categoryFilter}
+     WHERE s.status = 'ready' ${keywordCategoryFilter}
        AND to_tsvector('english', c.content) @@ plainto_tsquery('english', $1)
      ORDER BY ts_rank(to_tsvector('english', c.content), plainto_tsquery('english', $1)) DESC
      LIMIT 20`,
-    params,
+    keywordParams,
   );
 
   // Reciprocal Rank Fusion

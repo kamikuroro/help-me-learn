@@ -35,7 +35,7 @@ export const config = {
   jina: {
     apiKey: process.env.JINA_API_KEY || '',
     baseUrl: 'https://r.jina.ai',
-    timeoutMs: 30_000,
+    timeoutMs: 60_000,
   },
   elevenlabs: {
     apiKey: process.env.ELEVENLABS_API_KEY || '',
