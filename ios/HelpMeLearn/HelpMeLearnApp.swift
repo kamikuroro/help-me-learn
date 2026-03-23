@@ -28,6 +28,11 @@ struct MainTabView: View {
                         Label("Audio", systemImage: "headphones")
                     }
 
+                BooksView()
+                    .tabItem {
+                        Label("Books", systemImage: "book.closed")
+                    }
+
                 LibraryView()
                     .tabItem {
                         Label("Library", systemImage: "books.vertical")

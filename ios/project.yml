@@ -37,6 +37,7 @@ targets:
       - path: HelpMeLearn/Services/SettingsService.swift
       - path: HelpMeLearn/Models/Source.swift
       - path: HelpMeLearn/Models/Conversation.swift
+      - path: HelpMeLearn/Models/Book.swift
     settings:
       base:
         INFOPLIST_FILE: ShareExtension/Info.plist

@@ -122,6 +122,53 @@ final class APIClient {
         return request
     }
 
+    // MARK: - Books & Podcast
+
+    func listBooks() async throws -> [Book] {
+        return try await get("/api/books")
+    }
+
+    func getBook(id: Int) async throws -> BookDetail {
+        return try await get("/api/books/\(id)")
+    }
+
+    func createBook(filePath: String, pageRange: String? = nil, title: String? = nil, author: String? = nil) async throws -> CreateBookResponse {
+        var body: [String: Any] = ["file_path": filePath]
+        if let pageRange { body["page_range"] = pageRange }
+        if let title { body["title"] = title }
+        if let author { body["author"] = author }
+        return try await post("/api/books", body: body)
+    }
+
+    func generateEpisodes(bookId: Int, mode: String, chapters: [Int]? = nil) async throws -> GenerateEpisodesResponse {
+        var body: [String: Any] = ["mode": mode]
+        if let chapters { body["chapters"] = chapters }
+        return try await post("/api/books/\(bookId)/episodes", body: body)
+    }
+
+    func listEpisodes(bookId: Int) async throws -> [PodcastEpisode] {
+        return try await get("/api/books/\(bookId)/episodes")
+    }
+
+    func getEpisode(id: Int) async throws -> EpisodeDetail {
+        return try await get("/api/podcast/episodes/\(id)")
+    }
+
+    func regenerateEpisode(id: Int, regenerateScript: Bool = true) async throws -> RegenerateResponse {
+        return try await post("/api/podcast/episodes/\(id)/regenerate", body: ["regenerate_script": regenerateScript])
+    }
+
+    func podcastAudioURL(episodeId: Int) -> URL? {
+        URL(string: "\(baseURL)/api/podcast/episodes/\(episodeId)/audio")
+    }
+
+    func podcastAudioRequest(episodeId: Int) -> URLRequest? {
+        guard let url = podcastAudioURL(episodeId: episodeId) else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return request
+    }
+
     func healthCheck() async throws -> HealthResponse {
         guard let url = URL(string: "\(baseURL)/api/health") else { throw APIError.invalidURL }
         let (data, _) = try await session.data(from: url)

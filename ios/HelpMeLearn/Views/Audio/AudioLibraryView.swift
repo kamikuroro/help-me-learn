@@ -23,11 +23,19 @@ struct AudioLibraryView: View {
                             item: item,
                             isDownloading: viewModel.downloadingItemId == item.id,
                             onPlay: {
-                                audioPlayer.playAudio(
-                                    sourceId: item.sourceId,
-                                    type: item.type,
-                                    title: item.title
-                                )
+                                if let episodeId = item.episodeId {
+                                    audioPlayer.playPodcastEpisode(
+                                        episodeId: episodeId,
+                                        title: item.title,
+                                        mode: item.type == "podcast" ? "conversational" : "verbatim"
+                                    )
+                                } else {
+                                    audioPlayer.playAudio(
+                                        sourceId: item.sourceId,
+                                        type: item.type,
+                                        title: item.title
+                                    )
+                                }
                             },
                             onShare: {
                                 Task {
@@ -71,12 +79,12 @@ struct AudioItemRow: View {
                     .font(.headline)
                     .lineLimit(2)
                 Spacer()
-                Text(item.type.capitalized)
+                Text(item.type == "podcast" ? "Podcast" : item.type == "narration" ? "Narration" : item.type.capitalized)
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(item.type == "summary" ? Color.blue.opacity(0.2) : Color.purple.opacity(0.2))
-                    .foregroundStyle(item.type == "summary" ? .blue : .purple)
+                    .background(typeBadgeColor(item.type).opacity(0.2))
+                    .foregroundStyle(typeBadgeColor(item.type))
                     .clipShape(Capsule())
             }
 
@@ -110,6 +118,16 @@ struct AudioItemRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func typeBadgeColor(_ type: String) -> Color {
+        switch type {
+        case "summary": return .blue
+        case "full": return .purple
+        case "podcast": return .orange
+        case "narration": return .teal
+        default: return .gray
+        }
     }
 }
 

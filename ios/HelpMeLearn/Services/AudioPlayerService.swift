@@ -95,6 +95,29 @@ final class AudioPlayerService {
         updateNowPlayingInfo()
     }
 
+    func playPodcastEpisode(episodeId: Int, title: String, mode: String) {
+        guard let request = APIClient.shared.podcastAudioRequest(episodeId: episodeId) else { return }
+
+        let headers = request.allHTTPHeaderFields ?? [:]
+        let asset = AVURLAsset(url: request.url!, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        let item = AVPlayerItem(asset: asset)
+
+        if let player {
+            player.replaceCurrentItem(with: item)
+        } else {
+            player = AVPlayer(playerItem: item)
+        }
+
+        currentSourceId = episodeId
+        currentType = mode == "conversational" ? "podcast" : "narration"
+        currentTitle = title
+
+        setupTimeObserver()
+        player?.rate = playbackRate
+        isPlaying = true
+        updateNowPlayingInfo()
+    }
+
     func playFromURL(_ urlString: String, id: Int, type: String, title: String) {
         let baseURL = SettingsService.shared.serverURL
         let token = SettingsService.shared.authToken
@@ -194,7 +217,12 @@ final class AudioPlayerService {
             MPMediaItemPropertyPlaybackDuration: duration,
         ]
         if let type = currentType {
-            info[MPMediaItemPropertyArtist] = type == "full" ? "Full Article" : "Summary"
+            switch type {
+            case "full": info[MPMediaItemPropertyArtist] = "Full Article"
+            case "podcast": info[MPMediaItemPropertyArtist] = "Podcast"
+            case "narration": info[MPMediaItemPropertyArtist] = "Narration"
+            default: info[MPMediaItemPropertyArtist] = "Summary"
+            }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }

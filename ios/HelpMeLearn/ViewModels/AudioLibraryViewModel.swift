@@ -1,13 +1,27 @@
 import Foundation
 
 struct AudioItem: Identifiable {
-    let id: String // "sourceId-type"
+    let id: String // "sourceId-type" or "episode-episodeId"
     let sourceId: Int
-    let type: String // "summary" or "full"
+    let type: String // "summary", "full", "podcast", "narration"
     let title: String
     let summary: String?
     let url: String
     let durationSeconds: Double?
+    let episodeId: Int? // non-nil for podcast episodes
+
+    init(id: String, sourceId: Int, type: String, title: String, summary: String?, url: String, durationSeconds: Double?, episodeId: Int? = nil) {
+        self.id = id
+        self.sourceId = sourceId
+        self.type = type
+        self.title = title
+        self.summary = summary
+        self.url = url
+        self.durationSeconds = durationSeconds
+        self.episodeId = episodeId
+    }
+
+    var isPodcast: Bool { episodeId != nil }
 
     var formattedDuration: String {
         guard let d = durationSeconds, d > 0 else { return "" }
@@ -64,6 +78,25 @@ final class AudioLibraryViewModel {
                     ))
                 }
             }
+            // Also load podcast episodes from all books
+            let books = try await APIClient.shared.listBooks()
+            for book in books where book.isReady {
+                let episodes = try await APIClient.shared.listEpisodes(bookId: book.id)
+                for episode in episodes where episode.isReady {
+                    let chapterTitle = episode.chapterTitle ?? "Chapter \(episode.chapterIndex + 1)"
+                    audioItems.append(AudioItem(
+                        id: "episode-\(episode.id)",
+                        sourceId: book.id,
+                        type: episode.mode == "conversational" ? "podcast" : "narration",
+                        title: "\(book.title) — \(chapterTitle)",
+                        summary: nil,
+                        url: "",
+                        durationSeconds: episode.durationS,
+                        episodeId: episode.id
+                    ))
+                }
+            }
+
             items = audioItems
         } catch {
             self.error = error.localizedDescription
