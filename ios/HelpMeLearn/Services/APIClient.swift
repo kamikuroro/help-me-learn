@@ -91,6 +91,26 @@ final class APIClient {
         return try await get("/api/audio/quota")
     }
 
+    /// Download audio MP3 to a temp file and return the local file URL.
+    func downloadAudio(sourceId: Int, type: String, title: String?) async throws -> URL {
+        guard var request = audioRequest(sourceId: sourceId, type: type) else {
+            throw APIError.invalidURL
+        }
+        request.timeoutInterval = 120
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0, "Download failed")
+        }
+
+        let filename = "\(title ?? "audio")-\(type).mp3"
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try data.write(to: tempURL)
+        return tempURL
+    }
+
     func audioURL(sourceId: Int, type: String) -> URL? {
         URL(string: "\(baseURL)/api/audio/\(type)/\(sourceId)")
     }

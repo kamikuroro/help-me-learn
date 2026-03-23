@@ -23,6 +23,11 @@ struct MainTabView: View {
                         Label("Chat", systemImage: "bubble.left.and.bubble.right")
                     }
 
+                AudioLibraryView()
+                    .tabItem {
+                        Label("Audio", systemImage: "headphones")
+                    }
+
                 LibraryView()
                     .tabItem {
                         Label("Library", systemImage: "books.vertical")
