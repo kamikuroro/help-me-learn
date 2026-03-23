@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { withRetry } from '../utils/retry.js';
 
 // Semaphore to limit concurrent Claude invocations
 let activeCount = 0;
@@ -24,6 +25,51 @@ function releaseSemaphore(): void {
   activeCount--;
   const next = waitQueue.shift();
   if (next) next();
+}
+
+function spawnClaude(args: string[], prompt: string, timeoutMs: number): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const child = spawn(config.claude.binaryPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: timeoutMs,
+    });
+
+    // SIGKILL fallback if SIGTERM (from spawn timeout) doesn't kill the process
+    const killTimer = setTimeout(() => {
+      if (!child.killed) {
+        child.kill('SIGKILL');
+        logger.warn({ event: 'claude_sigkill' }, 'Claude process did not respond to SIGTERM, sent SIGKILL');
+      }
+    }, timeoutMs + 5000);
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(killTimer);
+      if (code === 0) {
+        resolve(stdout.trim());
+      } else {
+        reject(new Error(`Claude CLI exited with code ${code}: ${stderr.slice(0, 500)}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(killTimer);
+      reject(new Error(`Claude CLI spawn error: ${err.message}`));
+    });
+
+    child.stdin.write(prompt);
+    child.stdin.end();
+  });
 }
 
 export interface ClaudeOptions {
@@ -66,39 +112,10 @@ export async function invokeClaude(options: ClaudeOptions): Promise<string> {
   const start = Date.now();
 
   try {
-    const result = await new Promise<string>((resolve, reject) => {
-      const child = spawn(config.claude.binaryPath, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: timeoutMs,
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
-
-      child.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve(stdout.trim());
-        } else {
-          reject(new Error(`Claude CLI exited with code ${code}: ${stderr.slice(0, 500)}`));
-        }
-      });
-
-      child.on('error', (err) => {
-        reject(new Error(`Claude CLI spawn error: ${err.message}`));
-      });
-
-      // Pass prompt via stdin to avoid shell arg limits
-      child.stdin.write(prompt);
-      child.stdin.end();
-    });
+    const result = await withRetry(
+      () => spawnClaude(args, prompt, timeoutMs),
+      { maxAttempts: 3, baseDelayMs: 5000, label: 'claude_cli' },
+    );
 
     const duration = Date.now() - start;
     logger.info({

@@ -156,10 +156,14 @@ Answer the user's questions about this article. Be specific, cite sections when 
   }
 });
 
+const paginationSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 // GET /api/conversations — List conversations
 router.get('/conversations', async (req: Request, res: Response) => {
-  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-  const offset = parseInt(req.query.offset as string) || 0;
+  const { limit, offset } = paginationSchema.parse(req.query);
 
   const countResult = await queryOne<{ count: string }>(
     'SELECT COUNT(*) as count FROM conversations',

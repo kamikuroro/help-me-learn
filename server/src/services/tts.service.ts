@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { splitSentences } from '../utils/text.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -82,7 +83,7 @@ export function splitIntoSegments(text: string): string[] {
         segments.push(current.trim());
         current = '';
       }
-      segments.push(...splitBySentences(trimmed));
+      segments.push(...splitBySentenceSegments(trimmed));
       continue;
     }
 
@@ -101,8 +102,8 @@ export function splitIntoSegments(text: string): string[] {
   return segments;
 }
 
-function splitBySentences(text: string): string[] {
-  const sentences = text.match(/[^.!?]+[.!?]+[\s]?|[^.!?]+$/g) || [text];
+function splitBySentenceSegments(text: string): string[] {
+  const sentences = splitSentences(text);
   const segments: string[] = [];
   let current = '';
 
@@ -122,23 +123,28 @@ function splitBySentences(text: string): string[] {
   return segments;
 }
 
+/**
+ * Detect whether text is primarily Chinese or English.
+ */
+function detectLanguage(text: string): 'zh' | 'en' {
+  const cjk = text.match(/[\u4e00-\u9fff]/g)?.length ?? 0;
+  return cjk / text.length > 0.3 ? 'zh' : 'en';
+}
+
 async function synthesizeSegment(
   text: string,
   outputPath: string,
 ): Promise<{ durationSeconds: number; provider: string }> {
-  if (config.elevenlabs.apiKey) {
-    try {
-      return await synthesizeElevenLabs(text, outputPath);
-    } catch (err) {
-      logger.warn({ err }, 'ElevenLabs failed, falling back to Fish Audio');
-    }
+  switch (config.tts.provider) {
+    case 'elevenlabs':
+      return synthesizeElevenLabs(text, outputPath);
+    case 'fishaudio':
+      return synthesizeFishAudio(text, outputPath);
+    case 'qwen3tts':
+      return synthesizeQwen3TTS(text, outputPath);
+    default:
+      throw new Error(`Unknown TTS provider: ${config.tts.provider}`);
   }
-
-  if (config.fishaudio.apiKey) {
-    return await synthesizeFishAudio(text, outputPath);
-  }
-
-  throw new Error('No TTS provider configured (set ELEVENLABS_API_KEY or FISH_AUDIO_API_KEY)');
 }
 
 async function synthesizeElevenLabs(
@@ -200,6 +206,34 @@ async function synthesizeFishAudio(
   await fs.writeFile(outputPath, buffer);
   const durationSeconds = Math.round(buffer.length / 16000);
   return { durationSeconds, provider: 'fishaudio' };
+}
+
+async function synthesizeQwen3TTS(
+  text: string,
+  outputPath: string,
+): Promise<{ durationSeconds: number; provider: string }> {
+  const language = detectLanguage(text);
+  const response = await fetch(`${config.qwen3tts.baseUrl}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'qwen3-tts',
+      input: text,
+      voice: config.qwen3tts.voice,
+      response_format: 'mp3',
+      language,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Qwen3-TTS API error ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fs.writeFile(outputPath, buffer);
+  const durationSeconds = Math.round(buffer.length / 16000);
+  return { durationSeconds, provider: 'qwen3tts' };
 }
 
 function concatenateAudio(inputPaths: string[], outputPath: string): Promise<void> {

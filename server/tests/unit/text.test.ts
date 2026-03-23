@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { estimateTokens, countWords } from '../../src/utils/text.js';
 
 describe('estimateTokens', () => {
-  it('estimates ~4 chars per token', () => {
-    const text = 'a'.repeat(400);
+  it('estimates ~3.5 chars per token', () => {
+    const text = 'a'.repeat(350);
     expect(estimateTokens(text)).toBe(100);
   });
 
   it('rounds up partial tokens', () => {
-    expect(estimateTokens('hello')).toBe(2);
+    expect(estimateTokens('hello')).toBe(2); // 5 / 3.5 = 1.43 → 2
   });
 
   it('returns 0 for empty string', () => {

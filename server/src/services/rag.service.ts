@@ -1,5 +1,6 @@
 import { queryMany, queryOne } from './db.service.js';
 import { generateQueryEmbedding } from './embedding.service.js';
+import { toVectorLiteral } from '../utils/vector.js';
 import { logger } from '../logger.js';
 
 export interface SearchHit {
@@ -29,7 +30,7 @@ export async function hybridSearch(
 
   // Generate query embedding via Jina
   const queryVector = await generateQueryEmbedding(queryText);
-  const vectorLiteral = `[${queryVector.join(',')}]`;
+  const vectorLiteral = toVectorLiteral(queryVector);
 
   const categoryFilter = category
     ? `AND s.category = $${category ? 1 : 0}`

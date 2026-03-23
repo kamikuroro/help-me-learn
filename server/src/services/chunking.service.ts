@@ -1,4 +1,4 @@
-import { estimateTokens } from '../utils/text.js';
+import { estimateTokens, splitSentences } from '../utils/text.js';
 
 const MIN_CHUNK_TOKENS = 200;
 const TARGET_CHUNK_TOKENS = 600;
@@ -88,7 +88,7 @@ function splitByParagraphs(text: string): string[] {
         current = [];
         currentTokens = 0;
       }
-      const sentenceChunks = splitBySentences(para);
+      const sentenceChunks = splitBySentenceChunks(para);
       chunks.push(...sentenceChunks);
       continue;
     }
@@ -113,9 +113,8 @@ function splitByParagraphs(text: string): string[] {
 /**
  * Last resort: split by sentences to fit within token limits.
  */
-function splitBySentences(text: string): string[] {
-  // Split on sentence boundaries (. ! ? followed by space or end)
-  const sentences = text.match(/[^.!?]+[.!?]+[\s]?|[^.!?]+$/g) || [text];
+function splitBySentenceChunks(text: string): string[] {
+  const sentences = splitSentences(text);
   const chunks: string[] = [];
   let current: string[] = [];
   let currentTokens = 0;

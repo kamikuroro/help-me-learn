@@ -1,33 +1,49 @@
 import { logger } from '../logger.js';
 
-export type JobHandler = (data: any) => Promise<void>;
+export type JobHandler<T = unknown> = (data: T) => Promise<void>;
 
-interface QueuedJob {
+interface QueuedJob<T = unknown> {
   id: string;
-  data: any;
+  data: T;
   status: 'pending' | 'active' | 'completed' | 'failed';
   error?: string;
   createdAt: Date;
 }
 
-export class JobQueue {
+export class JobQueue<T = unknown> {
   private name: string;
-  private handler: JobHandler;
+  private handler: JobHandler<T>;
   private concurrency: number;
   private active = 0;
-  private pending: QueuedJob[] = [];
-  private jobs = new Map<string, QueuedJob>();
+  private pending: QueuedJob<T>[] = [];
+  private jobs = new Map<string, QueuedJob<T>>();
   private idCounter = 0;
+  private cleanupTimer: ReturnType<typeof setInterval>;
 
-  constructor(name: string, handler: JobHandler, concurrency = 1) {
+  constructor(name: string, handler: JobHandler<T>, concurrency = 1) {
     this.name = name;
     this.handler = handler;
     this.concurrency = concurrency;
+    this.cleanupTimer = setInterval(() => this.cleanup(), 5 * 60 * 1000);
   }
 
-  add(data: any): string {
+  /** Remove completed/failed jobs older than 1 hour to prevent unbounded memory growth. */
+  private cleanup(): void {
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    for (const [id, job] of this.jobs) {
+      if ((job.status === 'completed' || job.status === 'failed') && job.createdAt.getTime() < cutoff) {
+        this.jobs.delete(id);
+      }
+    }
+  }
+
+  destroy(): void {
+    clearInterval(this.cleanupTimer);
+  }
+
+  add(data: T): string {
     const id = `${this.name}-${++this.idCounter}`;
-    const job: QueuedJob = {
+    const job: QueuedJob<T> = {
       id,
       data,
       status: 'pending',
@@ -39,7 +55,7 @@ export class JobQueue {
     return id;
   }
 
-  getStatus(id: string): QueuedJob | undefined {
+  getStatus(id: string): QueuedJob<T> | undefined {
     return this.jobs.get(id);
   }
 

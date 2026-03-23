@@ -31,7 +31,7 @@ final class APIClient {
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 60
-        config.timeoutIntervalForResource = 300
+        config.timeoutIntervalForResource = 1200
         self.session = URLSession(configuration: config)
         self.decoder = JSONDecoder()
     }
@@ -72,7 +72,7 @@ final class APIClient {
         if let sourceId { body["source_id"] = sourceId }
         if let conversationId { body["conversation_id"] = conversationId }
         if tts { body["tts"] = true }
-        return try await post("/api/chat", body: body)
+        return try await post("/api/chat", body: body, timeout: 1200)
     }
 
     func listConversations(limit: Int = 20, offset: Int = 0) async throws -> PaginatedResponse<Conversation> {
@@ -133,10 +133,11 @@ final class APIClient {
         return try await execute(request)
     }
 
-    private func post<T: Decodable>(_ path: String, body: [String: Any]) async throws -> T {
+    private func post<T: Decodable>(_ path: String, body: [String: Any], timeout: TimeInterval? = nil) async throws -> T {
         var request = try makeRequest(path, method: "POST")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        if let timeout { request.timeoutInterval = timeout }
         return try await execute(request)
     }
 

@@ -22,7 +22,8 @@ export async function withRetry<T>(
         throw error;
       }
 
-      const delay = Math.min(baseDelayMs * Math.pow(4, attempt - 1), maxDelayMs);
+      const rawDelay = Math.min(baseDelayMs * Math.pow(4, attempt - 1), maxDelayMs);
+      const delay = Math.round(rawDelay * (0.5 + Math.random())); // jitter: 0.5x–1.5x
       logger.warn({ err: error, attempt, label, retryInMs: delay }, `${label} failed, retrying`);
       await new Promise((resolve) => setTimeout(resolve, delay));
     }

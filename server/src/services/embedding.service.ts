@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { logger } from '../logger.js';
+import { withRetry } from '../utils/retry.js';
 
 const JINA_EMBEDDINGS_URL = 'https://api.jina.ai/v1/embeddings';
 const MODEL = 'jina-embeddings-v3';
@@ -20,28 +21,33 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
     const batch = texts.slice(i, i + MAX_BATCH_SIZE);
     const start = Date.now();
 
-    const response = await fetch(JINA_EMBEDDINGS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.jina.apiKey}`,
+    const data = await withRetry(
+      async () => {
+        const response = await fetch(JINA_EMBEDDINGS_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.jina.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            dimensions: DIMENSIONS,
+            input: batch,
+            task: 'retrieval.passage',
+          }),
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`Jina Embeddings API error ${response.status}: ${body.slice(0, 200)}`);
+        }
+
+        return await response.json() as {
+          data: { embedding: number[]; index: number }[];
+        };
       },
-      body: JSON.stringify({
-        model: MODEL,
-        dimensions: DIMENSIONS,
-        input: batch,
-        task: 'retrieval.passage',
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Jina Embeddings API error ${response.status}: ${body.slice(0, 200)}`);
-    }
-
-    const data = await response.json() as {
-      data: { embedding: number[]; index: number }[];
-    };
+      { maxAttempts: 3, baseDelayMs: 2000, label: 'jina_embed' },
+    );
 
     const duration = Date.now() - start;
     logger.info({
@@ -71,28 +77,33 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  * Generate embedding for a search query (uses different task type).
  */
 export async function generateQueryEmbedding(text: string): Promise<number[]> {
-  const response = await fetch(JINA_EMBEDDINGS_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.jina.apiKey}`,
+  const data = await withRetry(
+    async () => {
+      const response = await fetch(JINA_EMBEDDINGS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.jina.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          dimensions: DIMENSIONS,
+          input: [text],
+          task: 'retrieval.query',
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Jina Embeddings API error ${response.status}: ${body.slice(0, 200)}`);
+      }
+
+      return await response.json() as {
+        data: { embedding: number[] }[];
+      };
     },
-    body: JSON.stringify({
-      model: MODEL,
-      dimensions: DIMENSIONS,
-      input: [text],
-      task: 'retrieval.query',
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Jina Embeddings API error ${response.status}: ${body.slice(0, 200)}`);
-  }
-
-  const data = await response.json() as {
-    data: { embedding: number[] }[];
-  };
+    { maxAttempts: 3, baseDelayMs: 2000, label: 'jina_query_embed' },
+  );
 
   return data.data[0].embedding;
 }

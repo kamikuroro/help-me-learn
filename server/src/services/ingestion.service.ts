@@ -8,6 +8,7 @@ import { countWords } from '../utils/text.js';
 import { withRetry } from '../utils/retry.js';
 import { DuplicateSourceError, IngestionFailedError } from '../types/errors.js';
 import { generateEmbeddings } from './embedding.service.js';
+import { toVectorLiteral } from '../utils/vector.js';
 import crypto from 'crypto';
 
 interface SummarizationResult {
@@ -89,7 +90,7 @@ export async function runIngestionPipeline(sourceId: number, rawContent?: string
     for (let i = 0; i < validChunks.length; i++) {
       const chunk = validChunks[i];
       const vector = embeddings[i];
-      const vectorLiteral = `[${vector.join(',')}]`;
+      const vectorLiteral = toVectorLiteral(vector);
 
       await query(
         `INSERT INTO chunks (source_id, chunk_index, content, token_count, embedding)
@@ -103,6 +104,9 @@ export async function runIngestionPipeline(sourceId: number, rawContent?: string
     await updateStatus(sourceId, 'ready');
     logger.info({ event: 'ingest_complete', source_id: sourceId, chunks: chunks.length });
   } catch (error) {
+    // Clean up any orphaned chunks from partial processing
+    await query('DELETE FROM chunks WHERE source_id = $1', [sourceId]).catch(() => {});
+
     const message = error instanceof Error ? error.message : String(error);
     await query(
       `UPDATE sources SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2`,

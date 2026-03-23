@@ -45,10 +45,17 @@ export const config = {
   fishaudio: {
     apiKey: process.env.FISH_AUDIO_API_KEY || '',
   },
+  qwen3tts: {
+    baseUrl: optional('QWEN3_TTS_BASE_URL', 'http://localhost:8880'),
+    voice: optional('QWEN3_TTS_VOICE', 'demo_speaker0'),
+  },
+  tts: {
+    provider: optional('TTS_PROVIDER', 'elevenlabs') as 'elevenlabs' | 'fishaudio' | 'qwen3tts',
+  },
   claude: {
     binaryPath: optional('CLAUDE_PATH', 'claude'),
     model: optional('CLAUDE_MODEL', 'opus'),
-    timeoutMs: optionalInt('CLAUDE_TIMEOUT_MS', 120_000),
+    timeoutMs: optionalInt('CLAUDE_TIMEOUT_MS', 1_200_000),
   },
   auth: {
     token: required('API_TOKEN'),
@@ -60,3 +67,11 @@ export const config = {
     level: optional('LOG_LEVEL', 'info'),
   },
 } as const;
+
+// Validate TTS provider has required credentials
+if (config.tts.provider === 'elevenlabs' && !config.elevenlabs.apiKey) {
+  throw new Error('TTS_PROVIDER is elevenlabs but ELEVENLABS_API_KEY is not set');
+}
+if (config.tts.provider === 'fishaudio' && !config.fishaudio.apiKey) {
+  throw new Error('TTS_PROVIDER is fishaudio but FISH_AUDIO_API_KEY is not set');
+}

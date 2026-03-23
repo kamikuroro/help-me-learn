@@ -9,35 +9,44 @@ import fsp from 'fs/promises';
 
 const router = Router();
 
-// GET /api/audio/quota — ElevenLabs character usage and remaining quota
+// GET /api/audio/quota — TTS provider quota
 router.get('/quota', async (_req: Request, res: Response) => {
-  if (!config.elevenlabs.apiKey) {
-    res.json({ character_limit: 0, character_count: 0, characters_remaining: 0, provider: 'none' });
-    return;
+  const provider = config.tts.provider;
+
+  if (provider === 'elevenlabs') {
+    if (!config.elevenlabs.apiKey) {
+      res.json({ provider, character_limit: 0, character_count: 0, characters_remaining: 0 });
+      return;
+    }
+
+    const response = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+      headers: { 'xi-api-key': config.elevenlabs.apiKey },
+    });
+
+    if (!response.ok) {
+      res.status(502).json({ error: 'Failed to fetch ElevenLabs quota' });
+      return;
+    }
+
+    const data = await response.json() as {
+      character_count: number;
+      character_limit: number;
+      tier?: string;
+    };
+
+    res.json({
+      provider,
+      character_limit: data.character_limit,
+      character_count: data.character_count,
+      characters_remaining: data.character_limit - data.character_count,
+      tier: data.tier || 'unknown',
+    });
+  } else if (provider === 'fishaudio') {
+    res.json({ provider, quota: null });
+  } else {
+    // qwen3tts — local, unlimited
+    res.json({ provider, unlimited: true });
   }
-
-  const response = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
-    headers: { 'xi-api-key': config.elevenlabs.apiKey },
-  });
-
-  if (!response.ok) {
-    res.status(502).json({ error: 'Failed to fetch ElevenLabs quota' });
-    return;
-  }
-
-  const data = await response.json() as {
-    character_count: number;
-    character_limit: number;
-    tier?: string;
-  };
-
-  res.json({
-    character_limit: data.character_limit,
-    character_count: data.character_count,
-    characters_remaining: data.character_limit - data.character_count,
-    tier: data.tier || 'unknown',
-    provider: 'elevenlabs',
-  });
 });
 
 const generateSchema = z.object({
@@ -168,7 +177,9 @@ async function streamAudio(req: Request, res: Response, filePath: string): Promi
         'Content-Type': 'audio/mpeg',
       });
 
-      fs.createReadStream(filePath, { start, end }).pipe(res);
+      const stream = fs.createReadStream(filePath, { start, end });
+      req.on('close', () => stream.destroy());
+      stream.pipe(res);
     } else {
       res.writeHead(200, {
         'Content-Length': fileSize,
@@ -176,7 +187,9 @@ async function streamAudio(req: Request, res: Response, filePath: string): Promi
         'Accept-Ranges': 'bytes',
       });
 
-      fs.createReadStream(filePath).pipe(res);
+      const stream = fs.createReadStream(filePath);
+      req.on('close', () => stream.destroy());
+      stream.pipe(res);
     }
   } catch {
     res.status(404).json({ error: 'Audio file not found on disk' });

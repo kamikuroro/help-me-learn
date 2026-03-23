@@ -61,7 +61,7 @@ struct LibraryView: View {
                 } else {
                     List(viewModel.sources) { source in
                         NavigationLink {
-                            ChatView(sourceId: source.id, sourceTitle: source.title)
+                            SourceDetailView(sourceId: source.id, sourceTitle: source.title)
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(source.title ?? "Untitled")

@@ -52,8 +52,8 @@ app.get('/api/logs/stream', authMiddleware, (req, res) => {
     const singleLine = line.replace(/\n/g, '\\n');
     res.write(`data: ${singleLine}\n\n`);
     // Flush to avoid buffering delays
-    if (typeof (res as any).flush === 'function') {
-      (res as any).flush();
+    if ('flush' in res && typeof res.flush === 'function') {
+      res.flush();
     }
   };
 
@@ -89,9 +89,15 @@ async function shutdown(signal: string) {
   await ingestionQueue.drain(30_000);
   await ttsQueue.drain(30_000);
   await digestQueue.drain(30_000);
+  ingestionQueue.destroy();
+  ttsQueue.destroy();
+  digestQueue.destroy();
   await closePool();
   process.exit(0);
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, 'Unhandled promise rejection');
+});
