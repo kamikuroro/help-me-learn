@@ -213,13 +213,14 @@ async function synthesizeQwen3TTS(
   outputPath: string,
 ): Promise<{ durationSeconds: number; provider: string }> {
   const language = detectLanguage(text);
+  const voice = language === 'zh' ? config.qwen3tts.voiceZh : config.qwen3tts.voiceEn;
   const response = await fetch(`${config.qwen3tts.baseUrl}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'qwen3-tts',
       input: text,
-      voice: config.qwen3tts.voice,
+      voice,
       response_format: 'mp3',
       language,
     }),

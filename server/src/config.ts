@@ -47,7 +47,8 @@ export const config = {
   },
   qwen3tts: {
     baseUrl: optional('QWEN3_TTS_BASE_URL', 'http://localhost:8880'),
-    voice: optional('QWEN3_TTS_VOICE', 'demo_speaker0'),
+    voiceEn: optional('QWEN3_TTS_VOICE_EN', 'demo_speaker0'),
+    voiceZh: optional('QWEN3_TTS_VOICE_ZH', 'demo_speaker0'),
   },
   tts: {
     provider: optional('TTS_PROVIDER', 'elevenlabs') as 'elevenlabs' | 'fishaudio' | 'qwen3tts',
