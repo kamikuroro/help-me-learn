@@ -41,48 +41,45 @@ struct SourceRowView: View {
             }
 
             if source.isReady {
-                HStack(spacing: 12) {
-                    // Read article button
-                    NavigationLink {
-                        ArticleDetailView(sourceId: source.id, sourceTitle: source.title)
-                    } label: {
-                        Label("Read", systemImage: "book")
-                            .font(.caption)
-                    }
+                // Row 1: Read article
+                NavigationLink {
+                    ArticleDetailView(sourceId: source.id, sourceTitle: source.title)
+                } label: {
+                    Label("Read article", systemImage: "book")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                }
 
-                    // Summary audio button
+                // Row 2: Audio controls
+                HStack(spacing: 8) {
+                    // Summary
                     if source.hasSummaryAudio {
                         Button(action: {
-                            audioPlayer.playAudio(
-                                sourceId: source.id,
-                                type: "summary",
-                                title: source.title ?? "Summary"
-                            )
+                            audioPlayer.playAudio(sourceId: source.id, type: "summary", title: source.title ?? "Summary")
                         }) {
-                            Label("Summary", systemImage: "play.circle")
+                            Label("Sum", systemImage: "play.circle")
                                 .font(.caption)
                         }
                     } else if generatingSummary {
-                        GeneratingButton(label: "Summary")
+                        GeneratingButton(label: "Sum")
                     } else {
                         Button(action: {
                             generatingSummary = true
                             onGenerateAudio("summary")
                             pollForAudio(type: "summary")
                         }) {
-                            Label("Gen Summary\(formatChars(source.summaryChars))", systemImage: "waveform")
-                                .font(.caption)
+                            HStack(spacing: 3) {
+                                Image(systemName: "waveform")
+                                Text("Sum\(formatChars(source.summaryChars))")
+                            }
+                            .font(.caption)
                         }
                     }
 
-                    // Full audio button
+                    // Full
                     if source.hasFullAudio {
                         Button(action: {
-                            audioPlayer.playAudio(
-                                sourceId: source.id,
-                                type: "full",
-                                title: source.title ?? "Full Article"
-                            )
+                            audioPlayer.playAudio(sourceId: source.id, type: "full", title: source.title ?? "Full Article")
                         }) {
                             Label("Full", systemImage: "play.circle.fill")
                                 .font(.caption)
@@ -95,8 +92,11 @@ struct SourceRowView: View {
                             onGenerateAudio("full")
                             pollForAudio(type: "full")
                         }) {
-                            Label("Gen Full\(formatChars(source.contentChars))", systemImage: "waveform")
-                                .font(.caption)
+                            HStack(spacing: 3) {
+                                Image(systemName: "waveform")
+                                Text("Full\(formatChars(source.contentChars))")
+                            }
+                            .font(.caption)
                         }
                     }
                 }
