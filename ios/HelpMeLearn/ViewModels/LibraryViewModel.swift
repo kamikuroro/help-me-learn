@@ -21,11 +21,20 @@ final class LibraryViewModel {
                 limit: 100,
                 category: selectedCategory
             )
-            sources = response.data.filter { $0.isReady }
+            sources = response.data.filter { $0.isReady && !$0.url.hasPrefix("book://") }
         } catch {
             self.error = error.localizedDescription
         }
         isLoading = false
+    }
+
+    func deleteSource(_ source: Source) async {
+        do {
+            try await APIClient.shared.deleteSource(id: source.id)
+            sources.removeAll { $0.id == source.id }
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     func search() async {

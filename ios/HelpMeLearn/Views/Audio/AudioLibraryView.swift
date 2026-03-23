@@ -18,33 +18,41 @@ struct AudioLibraryView: View {
                         description: Text("Generate audio from your Feed to see it here")
                     )
                 } else {
-                    List(viewModel.items) { item in
-                        AudioItemRow(
-                            item: item,
-                            isDownloading: viewModel.downloadingItemId == item.id,
-                            onPlay: {
-                                if let episodeId = item.episodeId {
-                                    audioPlayer.playPodcastEpisode(
-                                        episodeId: episodeId,
-                                        title: item.title,
-                                        mode: item.type == "podcast" ? "conversational" : "verbatim"
-                                    )
-                                } else {
-                                    audioPlayer.playAudio(
-                                        sourceId: item.sourceId,
-                                        type: item.type,
-                                        title: item.title
-                                    )
-                                }
-                            },
-                            onShare: {
-                                Task {
-                                    if let fileURL = await viewModel.downloadForSharing(item: item) {
-                                        shareItem = ShareableAudio(fileURL: fileURL, text: item.shareText)
+                    List {
+                        ForEach(viewModel.items) { item in
+                            AudioItemRow(
+                                item: item,
+                                isDownloading: viewModel.downloadingItemId == item.id,
+                                onPlay: {
+                                    if let episodeId = item.episodeId {
+                                        audioPlayer.playPodcastEpisode(
+                                            episodeId: episodeId,
+                                            title: item.title,
+                                            mode: item.type == "podcast" ? "conversational" : "verbatim"
+                                        )
+                                    } else {
+                                        audioPlayer.playAudio(
+                                            sourceId: item.sourceId,
+                                            type: item.type,
+                                            title: item.title
+                                        )
+                                    }
+                                },
+                                onShare: {
+                                    Task {
+                                        if let fileURL = await viewModel.downloadForSharing(item: item) {
+                                            shareItem = ShareableAudio(fileURL: fileURL, text: item.shareText)
+                                        }
                                     }
                                 }
+                            )
+                        }
+                        .onDelete { indexSet in
+                            for index in indexSet {
+                                let item = viewModel.items[index]
+                                Task { await viewModel.deleteItem(item) }
                             }
-                        )
+                        }
                     }
                     .refreshable { await viewModel.loadAudio() }
                 }

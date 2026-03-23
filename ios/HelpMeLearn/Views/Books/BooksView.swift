@@ -15,9 +15,17 @@ struct BooksView: View {
                         description: Text("Ingest a PDF book via the API to get started")
                     )
                 } else {
-                    List(viewModel.books) { book in
-                        NavigationLink(value: book.id) {
-                            BookRowView(book: book)
+                    List {
+                        ForEach(viewModel.books) { book in
+                            NavigationLink(value: book.id) {
+                                BookRowView(book: book)
+                            }
+                        }
+                        .onDelete { indexSet in
+                            for index in indexSet {
+                                let book = viewModel.books[index]
+                                Task { await viewModel.deleteBook(book) }
+                            }
                         }
                     }
                     .refreshable { await viewModel.loadBooks() }

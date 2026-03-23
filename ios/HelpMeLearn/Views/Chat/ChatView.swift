@@ -11,7 +11,7 @@ struct ChatView: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: 16) {
                         ForEach(viewModel.messages) { message in
                             MessageBubbleView(message: message)
                                 .id(message.id)
@@ -19,10 +19,7 @@ struct ChatView: View {
 
                         if viewModel.isLoading {
                             HStack {
-                                ProgressView()
-                                    .padding(.horizontal)
-                                Text("Thinking...")
-                                    .foregroundStyle(.secondary)
+                                TypingIndicator()
                                 Spacer()
                             }
                             .padding(.horizontal)
@@ -45,7 +42,7 @@ struct ChatView: View {
             Divider()
 
             HStack(spacing: 8) {
-                TextField("Ask a question...", text: $inputText, axis: .vertical)
+                TextField("What are you curious about?", text: $inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...5)
                     .focused($isInputFocused)
@@ -61,6 +58,15 @@ struct ChatView: View {
         .navigationTitle(sourceTitle ?? (viewModel.chatType == "per_article" ? "Article Chat" : "Knowledge Base"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if viewModel.conversationId != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive) {
+                        Task { await viewModel.deleteConversation() }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
+            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Done") {
@@ -87,5 +93,29 @@ struct ChatView: View {
         inputText = ""
         isInputFocused = false
         Task { await viewModel.sendMessage(text) }
+    }
+}
+
+struct TypingIndicator: View {
+    @State private var phase = 0.0
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(Color.blue.opacity(0.6))
+                    .frame(width: 8, height: 8)
+                    .offset(y: phase == Double(index) ? -4 : 0)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.blue.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true)) {
+                phase = 2
+            }
+        }
     }
 }

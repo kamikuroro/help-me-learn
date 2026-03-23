@@ -59,24 +59,32 @@ struct LibraryView: View {
                         }
                     }
                 } else {
-                    List(viewModel.sources) { source in
-                        NavigationLink {
-                            SourceDetailView(sourceId: source.id, sourceTitle: source.title)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(source.title ?? "Untitled")
-                                    .font(.headline)
-                                if let category = source.category {
-                                    Text(category.replacingOccurrences(of: "_", with: " "))
-                                        .font(.caption)
-                                        .foregroundStyle(.blue)
+                    List {
+                        ForEach(viewModel.sources) { source in
+                            NavigationLink {
+                                SourceDetailView(sourceId: source.id, sourceTitle: source.title)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(source.title ?? "Untitled")
+                                        .font(.headline)
+                                    if let category = source.category {
+                                        Text(category.replacingOccurrences(of: "_", with: " "))
+                                            .font(.caption)
+                                            .foregroundStyle(.blue)
+                                    }
+                                    if let summary = source.summary {
+                                        Text(summary)
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
+                                    }
                                 }
-                                if let summary = source.summary {
-                                    Text(summary)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
-                                }
+                            }
+                        }
+                        .onDelete { indexSet in
+                            for index in indexSet {
+                                let source = viewModel.sources[index]
+                                Task { await viewModel.deleteSource(source) }
                             }
                         }
                     }

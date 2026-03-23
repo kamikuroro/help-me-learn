@@ -33,6 +33,108 @@ Rules:
 - Do NOT skip content. If a section is dense, take more turns to cover it fully.
 - Output ONLY the tagged script. No preamble, no explanation.`;
 
+const ARTICLE_NARRATION_SYSTEM_PROMPT = `You are a professional narrator preparing a spoken-word script from a web article or technical content.
+
+Rules:
+- Read all prose content verbatim — do not summarize or skip paragraphs.
+- For code blocks: say "Here we have a code example" then describe what the code does conversationally. Mention the language, key function names, and the purpose. Do NOT read code syntax aloud.
+- For tables: describe the table structure and highlight the key data points conversationally.
+- For images/diagrams: if alt text or a caption exists, describe it. Otherwise say "The article includes a diagram illustrating [topic]" and continue.
+- For mathematical equations: read them in natural language.
+- Preserve the article structure: announce section headings naturally.
+- Do NOT add opinions, commentary, or filler beyond what the text contains.
+- Wrap every paragraph of output in [NARRATOR]: tags, one tag per logical spoken segment.
+- Match the language of the source material. If the source is Chinese, narrate in Chinese.
+- Output ONLY the tagged script. No preamble, no explanation.`;
+
+const ARTICLE_CONVERSATIONAL_SYSTEM_PROMPT = `You are writing a podcast script for two hosts discussing a web article.
+HOST_A is the explainer — they have read the article thoroughly and present ALL content.
+HOST_B is the curious learner — they ask clarifying questions, request examples, and react naturally.
+
+Rules:
+- Cover EVERY concept, argument, and example from the article. This is comprehensive coverage, not a summary.
+- HOST_A explains each section. HOST_B asks follow-up questions that a reader might have.
+- For code blocks: HOST_A describes what the code does, HOST_B might ask "what would happen if we changed X?" or "why did the author choose this approach?"
+- For tables: HOST_A walks through the key comparisons, HOST_B highlights surprising findings.
+- For images/diagrams: HOST_A describes what the diagram shows and why it matters.
+- For equations: HOST_A reads them naturally and explains the intuition behind them.
+- Keep the tone conversational but substantive — like a study session between friends.
+- Each speaker turn is one tag: [HOST_A]: or [HOST_B]:
+- Aim for roughly 70% HOST_A, 30% HOST_B by word count.
+- Match the language of the source material. If the source is Chinese, the entire podcast should be in Chinese.
+- Do NOT skip content. If a section is dense, take more turns to cover it fully.
+- Output ONLY the tagged script. No preamble, no explanation.`;
+
+/**
+ * Generate a narration script for an article/source.
+ */
+export async function generateArticleNarrationScript(
+  content: string,
+  title: string,
+  language: string,
+): Promise<string> {
+  const start = Date.now();
+
+  const prompt = `Article: ${title}
+Language: ${language}
+
+---
+
+${content}`;
+
+  const script = await invokeClaude({
+    prompt,
+    systemPrompt: ARTICLE_NARRATION_SYSTEM_PROMPT,
+  });
+
+  const duration = Date.now() - start;
+  logger.info({
+    event: 'script_generate',
+    mode: 'article_narration',
+    title,
+    input_chars: content.length,
+    output_chars: script.length,
+    duration_ms: duration,
+  });
+
+  return script;
+}
+
+/**
+ * Generate a two-host conversational script for an article/source.
+ */
+export async function generateArticleConversationalScript(
+  content: string,
+  title: string,
+  language: string,
+): Promise<string> {
+  const start = Date.now();
+
+  const prompt = `Article: ${title}
+Language: ${language}
+
+---
+
+${content}`;
+
+  const script = await invokeClaude({
+    prompt,
+    systemPrompt: ARTICLE_CONVERSATIONAL_SYSTEM_PROMPT,
+  });
+
+  const duration = Date.now() - start;
+  logger.info({
+    event: 'script_generate',
+    mode: 'article_conversational',
+    title,
+    input_chars: content.length,
+    output_chars: script.length,
+    duration_ms: duration,
+  });
+
+  return script;
+}
+
 /**
  * Generate a verbatim narration script for a book chapter.
  */

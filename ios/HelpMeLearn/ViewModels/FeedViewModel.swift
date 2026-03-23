@@ -12,7 +12,7 @@ final class FeedViewModel {
         error = nil
         do {
             let response = try await APIClient.shared.listSources()
-            sources = response.data
+            sources = response.data.filter { !$0.url.hasPrefix("book://") }
             total = response.total
         } catch {
             self.error = error.localizedDescription
@@ -33,9 +33,9 @@ final class FeedViewModel {
         }
     }
 
-    func generateAudio(sourceId: Int, type: String) async {
+    func generateAudio(sourceId: Int, type: String, mode: String = "narration") async {
         do {
-            try await APIClient.shared.generateAudio(sourceId: sourceId, type: type)
+            try await APIClient.shared.generateAudio(sourceId: sourceId, type: type, mode: mode)
         } catch {
             self.error = error.localizedDescription
         }

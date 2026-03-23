@@ -54,7 +54,7 @@ final class AudioLibraryViewModel {
         do {
             let response = try await APIClient.shared.listSources(limit: 100)
             var audioItems: [AudioItem] = []
-            for source in response.data {
+            for source in response.data where !source.url.hasPrefix("book://") {
                 if source.hasSummaryAudio {
                     audioItems.append(AudioItem(
                         id: "\(source.id)-summary",
@@ -102,6 +102,19 @@ final class AudioLibraryViewModel {
             self.error = error.localizedDescription
         }
         isLoading = false
+    }
+
+    func deleteItem(_ item: AudioItem) async {
+        do {
+            if let episodeId = item.episodeId {
+                try await APIClient.shared.deleteEpisode(id: episodeId)
+            } else {
+                try await APIClient.shared.deleteSource(id: item.sourceId)
+            }
+            items.removeAll { $0.id == item.id }
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     func downloadForSharing(item: AudioItem) async -> URL? {

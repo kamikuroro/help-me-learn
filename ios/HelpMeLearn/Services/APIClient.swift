@@ -83,8 +83,8 @@ final class APIClient {
         return try await get("/api/conversations/\(id)")
     }
 
-    func generateAudio(sourceId: Int, type: String) async throws {
-        let _: GenerateAudioResponse = try await post("/api/audio/generate/\(sourceId)", body: ["type": type])
+    func generateAudio(sourceId: Int, type: String, mode: String = "narration") async throws {
+        let _: GenerateAudioResponse = try await post("/api/audio/generate/\(sourceId)", body: ["type": type, "mode": mode])
     }
 
     func getAudioQuota() async throws -> AudioQuota {
@@ -160,6 +160,14 @@ final class APIClient {
 
     func deleteBook(id: Int) async throws {
         let _: EmptyResponse = try await delete("/api/books/\(id)")
+    }
+
+    func deleteConversation(id: Int) async throws {
+        let _: EmptyResponse = try await delete("/api/conversations/\(id)")
+    }
+
+    func deleteEpisode(id: Int) async throws {
+        let _: EmptyResponse = try await delete("/api/podcast/episodes/\(id)")
     }
 
     func podcastAudioURL(episodeId: Int) -> URL? {

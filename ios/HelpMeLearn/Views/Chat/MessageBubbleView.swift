@@ -10,19 +10,25 @@ struct MessageBubbleView: View {
             if message.isUser { Spacer(minLength: 60) }
 
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
-                    .textSelection(.enabled)
-                    .padding(12)
-                    .background(message.isUser ? Color.blue : Color(.systemGray5))
-                    .foregroundStyle(message.isUser ? .white : .primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .contextMenu {
-                        Button(action: {
-                            UIPasteboard.general.string = message.content
-                        }) {
-                            Label("Copy", systemImage: "doc.on.doc")
-                        }
+                Group {
+                    if message.isUser {
+                        Text(message.content)
+                    } else {
+                        Text(markdownContent)
                     }
+                }
+                .textSelection(.enabled)
+                .padding(12)
+                .background(bubbleBackground)
+                .foregroundStyle(message.isUser ? .white : .primary)
+                .clipShape(bubbleShape)
+                .contextMenu {
+                    Button(action: {
+                        UIPasteboard.general.string = message.content
+                    }) {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                }
 
                 HStack(spacing: 8) {
                     if !message.isUser, let audioPath = message.audioPath {
@@ -47,6 +53,41 @@ struct MessageBubbleView: View {
 
             if !message.isUser { Spacer(minLength: 60) }
         }
+    }
+
+    @ViewBuilder
+    private var bubbleBackground: some View {
+        if message.isUser {
+            LinearGradient(
+                colors: [.blue, .indigo],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            Color.blue.opacity(0.08)
+        }
+    }
+
+    private var bubbleShape: UnevenRoundedRectangle {
+        if message.isUser {
+            UnevenRoundedRectangle(
+                topLeadingRadius: 16,
+                bottomLeadingRadius: 16,
+                bottomTrailingRadius: 4,
+                topTrailingRadius: 16
+            )
+        } else {
+            UnevenRoundedRectangle(
+                topLeadingRadius: 16,
+                bottomLeadingRadius: 4,
+                bottomTrailingRadius: 16,
+                topTrailingRadius: 16
+            )
+        }
+    }
+
+    private var markdownContent: AttributedString {
+        (try? AttributedString(markdown: message.content, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(message.content)
     }
 
     private var isPlayingThis: Bool {

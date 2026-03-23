@@ -203,4 +203,30 @@ router.get('/conversations/:id', async (req: Request, res: Response) => {
   res.json({ ...conversation, messages });
 });
 
+// DELETE /api/conversations/:id — Delete a conversation, its messages, and audio files
+router.delete('/conversations/:id', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) throw new ValidationError('Invalid conversation ID');
+
+  const conv = await queryOne<{ id: number }>('SELECT id FROM conversations WHERE id = $1', [id]);
+  if (!conv) throw new ConversationNotFoundError(id);
+
+  // Clean up message audio files
+  const messages = await queryMany<{ audio_path: string | null }>(
+    'SELECT audio_path FROM messages WHERE conversation_id = $1 AND audio_path IS NOT NULL',
+    [id],
+  );
+  const fsp = await import('fs/promises');
+  for (const msg of messages) {
+    if (msg.audio_path) {
+      await fsp.unlink(msg.audio_path).catch(() => {});
+    }
+  }
+
+  // Delete conversation (messages cascade)
+  await query('DELETE FROM conversations WHERE id = $1', [id]);
+
+  res.status(204).send();
+});
+
 export default router;

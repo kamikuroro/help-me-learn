@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SourceRowView: View {
     let source: Source
-    let onGenerateAudio: (String) -> Void
+    let onGenerateAudio: (String, String) -> Void // (type, mode)
     @State private var audioPlayer = AudioPlayerService.shared
     @State private var generatingSummary = false
     @State private var generatingFull = false
@@ -63,11 +63,11 @@ struct SourceRowView: View {
                     } else if generatingSummary {
                         GeneratingButton(label: "Sum")
                     } else {
-                        Button(action: {
-                            generatingSummary = true
-                            onGenerateAudio("summary")
-                            pollForAudio(type: "summary")
-                        }) {
+                        Menu {
+                            Button("Narration") { generateAudio(type: "summary", mode: "narration") }
+                            Button("Podcast") { generateAudio(type: "summary", mode: "conversational") }
+                            Button("Direct") { generateAudio(type: "summary", mode: "direct") }
+                        } label: {
                             HStack(spacing: 3) {
                                 Image(systemName: "waveform")
                                 Text("Sum\(formatChars(source.summaryChars))")
@@ -87,11 +87,11 @@ struct SourceRowView: View {
                     } else if generatingFull {
                         GeneratingButton(label: "Full")
                     } else {
-                        Button(action: {
-                            generatingFull = true
-                            onGenerateAudio("full")
-                            pollForAudio(type: "full")
-                        }) {
+                        Menu {
+                            Button("Narration") { generateAudio(type: "full", mode: "narration") }
+                            Button("Podcast") { generateAudio(type: "full", mode: "conversational") }
+                            Button("Direct") { generateAudio(type: "full", mode: "direct") }
+                        } label: {
                             HStack(spacing: 3) {
                                 Image(systemName: "waveform")
                                 Text("Full\(formatChars(source.contentChars))")
@@ -113,6 +113,13 @@ struct SourceRowView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func generateAudio(type: String, mode: String) {
+        if type == "summary" { generatingSummary = true }
+        else { generatingFull = true }
+        onGenerateAudio(type, mode)
+        pollForAudio(type: type)
     }
 
     private func pollForAudio(type: String) {

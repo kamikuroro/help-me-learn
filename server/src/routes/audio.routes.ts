@@ -51,6 +51,7 @@ router.get('/quota', async (_req: Request, res: Response) => {
 
 const generateSchema = z.object({
   type: z.enum(['full', 'summary']),
+  mode: z.enum(['direct', 'narration', 'conversational']).optional().default('narration'),
 });
 
 // POST /api/audio/generate/:id — Trigger TTS generation
@@ -72,12 +73,13 @@ router.post('/generate/:id', async (req: Request, res: Response) => {
     throw new ValidationError(`Source must be in ready state (current: ${source.status})`);
   }
 
-  ttsQueue.add({ sourceId: id, type: parsed.data.type });
+  ttsQueue.add({ sourceId: id, type: parsed.data.type, mode: parsed.data.mode });
 
   res.status(202).json({
-    message: `TTS generation started for ${parsed.data.type}`,
+    message: `TTS generation started for ${parsed.data.type} (${parsed.data.mode})`,
     source_id: id,
     type: parsed.data.type,
+    mode: parsed.data.mode,
   });
 });
 

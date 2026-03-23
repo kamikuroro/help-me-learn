@@ -21,8 +21,8 @@ struct FeedView: View {
                 } else {
                     List {
                         ForEach(viewModel.sources) { source in
-                            SourceRowView(source: source, onGenerateAudio: { type in
-                                Task { await viewModel.generateAudio(sourceId: source.id, type: type) }
+                            SourceRowView(source: source, onGenerateAudio: { type, mode in
+                                Task { await viewModel.generateAudio(sourceId: source.id, type: type, mode: mode) }
                             })
                         }
                         .onDelete { indexSet in

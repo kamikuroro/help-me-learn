@@ -334,6 +334,29 @@ router.post('/podcast/episodes/:id/regenerate', async (req: Request, res: Respon
   res.status(202).json({ message: 'Episode regeneration started', episode_id: id });
 });
 
+// DELETE /api/podcast/episodes/:id — Delete a single podcast episode and its audio file
+router.delete('/podcast/episodes/:id', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) throw new ValidationError('Invalid episode ID');
+
+  const episode = await queryOne<{ id: number; audio_path: string | null }>(
+    'SELECT id, audio_path FROM podcast_episodes WHERE id = $1',
+    [id],
+  );
+  if (!episode) {
+    res.status(404).json({ error: 'Episode not found' });
+    return;
+  }
+
+  if (episode.audio_path) {
+    await fsp.unlink(episode.audio_path).catch(() => {});
+  }
+
+  await query('DELETE FROM podcast_episodes WHERE id = $1', [id]);
+
+  res.status(204).send();
+});
+
 // DELETE /api/books/:id — Delete a book, its chapters, episodes, linked sources, and audio files
 router.delete('/books/:id', async (req: Request, res: Response) => {
   const id = parseInt(req.params.id as string, 10);

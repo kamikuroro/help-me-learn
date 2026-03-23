@@ -62,6 +62,16 @@ final class ChatViewModel {
         }
     }
 
+    func deleteConversation() async {
+        guard let id = conversationId else { return }
+        do {
+            try await APIClient.shared.deleteConversation(id: id)
+            reset()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     func reset() {
         messages = []
         conversationId = nil

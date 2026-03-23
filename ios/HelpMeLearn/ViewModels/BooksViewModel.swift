@@ -16,6 +16,15 @@ final class BooksViewModel {
         }
         isLoading = false
     }
+
+    func deleteBook(_ book: Book) async {
+        do {
+            try await APIClient.shared.deleteBook(id: book.id)
+            books.removeAll { $0.id == book.id }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
 }
 
 @Observable
