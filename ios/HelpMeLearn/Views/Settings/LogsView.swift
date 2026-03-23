@@ -71,27 +71,35 @@ struct LogsView: View {
         request.timeoutInterval = 86400 // 24 hours
 
         task = Task {
-            do {
-                let (stream, response) = try await URLSession.shared.bytes(for: request)
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return }
-
-                await MainActor.run { isConnected = true }
-
-                for try await line in stream.lines {
-                    if Task.isCancelled { break }
-                    guard line.hasPrefix("data: ") else { continue }
-                    let json = String(line.dropFirst(6))
-                    let entry = LogEntry(raw: json)
-                    await MainActor.run {
-                        logs.append(entry)
-                        // Keep max 500 entries
-                        if logs.count > 500 { logs.removeFirst(logs.count - 500) }
+            // Reconnect loop — retries on disconnect
+            while !Task.isCancelled {
+                do {
+                    let (stream, response) = try await URLSession.shared.bytes(for: request)
+                    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                        try? await Task.sleep(for: .seconds(3))
+                        continue
                     }
+
+                    await MainActor.run { isConnected = true }
+
+                    for try await line in stream.lines {
+                        if Task.isCancelled { break }
+                        // Skip SSE comments (keepalives like ":ok")
+                        guard line.hasPrefix("data: ") else { continue }
+                        let json = String(line.dropFirst(6))
+                        let entry = LogEntry(raw: json)
+                        await MainActor.run {
+                            logs.append(entry)
+                            if logs.count > 500 { logs.removeFirst(logs.count - 500) }
+                        }
+                    }
+                } catch {
+                    // Stream ended or failed
                 }
-            } catch {
-                // Stream ended or failed
+                await MainActor.run { isConnected = false }
+                // Wait before reconnecting
+                try? await Task.sleep(for: .seconds(2))
             }
-            await MainActor.run { isConnected = false }
         }
     }
 }

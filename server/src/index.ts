@@ -44,8 +44,17 @@ app.get('/api/logs/stream', authMiddleware, (req, res) => {
     'Connection': 'keep-alive',
   });
 
+  // Send keepalive immediately so the client knows we're connected
+  res.write(':ok\n\n');
+
   const onLog = (line: string) => {
-    res.write(`data: ${line}\n\n`);
+    // Ensure single-line JSON for SSE (strip internal newlines from stack traces etc.)
+    const singleLine = line.replace(/\n/g, '\\n');
+    res.write(`data: ${singleLine}\n\n`);
+    // Flush to avoid buffering delays
+    if (typeof (res as any).flush === 'function') {
+      (res as any).flush();
+    }
   };
 
   logBroadcast.on('log', onLog);
