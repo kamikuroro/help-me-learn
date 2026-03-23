@@ -50,8 +50,13 @@ export const config = {
     voiceEn: optional('QWEN3_TTS_VOICE_EN', 'demo_speaker0'),
     voiceZh: optional('QWEN3_TTS_VOICE_ZH', 'demo_speaker0'),
   },
+  kokoro: {
+    baseUrl: optional('KOKORO_TTS_BASE_URL', 'http://localhost:8880'),
+    voiceEn: optional('KOKORO_TTS_VOICE_EN', 'af_heart'),
+    voiceZh: optional('KOKORO_TTS_VOICE_ZH', 'zf_xiaobei'),
+  },
   tts: {
-    provider: optional('TTS_PROVIDER', 'elevenlabs') as 'elevenlabs' | 'fishaudio' | 'qwen3tts',
+    provider: optional('TTS_PROVIDER', 'elevenlabs') as 'elevenlabs' | 'fishaudio' | 'qwen3tts' | 'kokoro',
   },
   claude: {
     binaryPath: optional('CLAUDE_PATH', 'claude'),

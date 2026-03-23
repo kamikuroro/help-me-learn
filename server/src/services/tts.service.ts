@@ -142,6 +142,8 @@ async function synthesizeSegment(
       return synthesizeFishAudio(text, outputPath);
     case 'qwen3tts':
       return synthesizeQwen3TTS(text, outputPath);
+    case 'kokoro':
+      return synthesizeKokoro(text, outputPath);
     default:
       throw new Error(`Unknown TTS provider: ${config.tts.provider}`);
   }
@@ -235,6 +237,34 @@ async function synthesizeQwen3TTS(
   await fs.writeFile(outputPath, buffer);
   const durationSeconds = Math.round(buffer.length / 16000);
   return { durationSeconds, provider: 'qwen3tts' };
+}
+
+async function synthesizeKokoro(
+  text: string,
+  outputPath: string,
+): Promise<{ durationSeconds: number; provider: string }> {
+  const language = detectLanguage(text);
+  const voice = language === 'zh' ? config.kokoro.voiceZh : config.kokoro.voiceEn;
+  const response = await fetch(`${config.kokoro.baseUrl}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'kokoro',
+      input: text,
+      voice,
+      response_format: 'mp3',
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Kokoro TTS API error ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fs.writeFile(outputPath, buffer);
+  const durationSeconds = Math.round(buffer.length / 16000);
+  return { durationSeconds, provider: 'kokoro' };
 }
 
 function concatenateAudio(inputPaths: string[], outputPath: string): Promise<void> {
