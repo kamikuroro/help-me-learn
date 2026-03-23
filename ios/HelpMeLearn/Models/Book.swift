@@ -4,14 +4,14 @@ struct Book: Codable, Identifiable {
     let id: Int
     let title: String
     let author: String?
-    let filePath: String
+    let filePath: String?
     let totalPages: Int?
     let totalChapters: Int?
     let language: String?
     let status: String
     let errorMessage: String?
     let metadata: [String: AnyCodableValue]?
-    let createdAt: String
+    let createdAt: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, author, status, language, metadata

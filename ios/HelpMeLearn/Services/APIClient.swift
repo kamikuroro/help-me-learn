@@ -272,9 +272,9 @@ struct HealthResponse: Codable {
 }
 
 struct AudioQuota: Codable {
-    let characterLimit: Int
-    let characterCount: Int
-    let charactersRemaining: Int
+    let characterLimit: Int?
+    let characterCount: Int?
+    let charactersRemaining: Int?
     let tier: String?
     let provider: String
 

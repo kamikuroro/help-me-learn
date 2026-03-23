@@ -48,17 +48,17 @@ struct SettingsView: View {
 
                     Toggle("Audio Chat Responses", isOn: $settings.chatAudioEnabled)
 
-                    if let quota {
+                    if let quota, let limit = quota.characterLimit, let count = quota.characterCount, let remaining = quota.charactersRemaining {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text("ElevenLabs Quota")
                                 Spacer()
-                                Text("\(formatK(quota.characterCount)) / \(formatK(quota.characterLimit))")
+                                Text("\(formatK(count)) / \(formatK(limit))")
                                     .foregroundStyle(.secondary)
                             }
-                            ProgressView(value: Double(quota.characterCount), total: Double(max(quota.characterLimit, 1)))
-                                .tint(quota.charactersRemaining < 5000 ? .orange : .blue)
-                            Text("\(formatK(quota.charactersRemaining)) characters remaining")
+                            ProgressView(value: Double(count), total: Double(max(limit, 1)))
+                                .tint(remaining < 5000 ? .orange : .blue)
+                            Text("\(formatK(remaining)) characters remaining")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
