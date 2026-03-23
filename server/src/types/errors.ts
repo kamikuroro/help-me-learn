@@ -46,3 +46,21 @@ export class IngestionFailedError extends AppError {
     super(`Ingestion failed for source ${sourceId} at step ${step}: ${reason}`, 500, 'INGESTION_FAILED');
   }
 }
+
+export class BookNotFoundError extends AppError {
+  constructor(bookId: number) {
+    super(`Book ${bookId} not found`, 404, 'BOOK_NOT_FOUND');
+  }
+}
+
+export class ChapterNotFoundError extends AppError {
+  constructor(chapterId: number) {
+    super(`Chapter ${chapterId} not found`, 404, 'CHAPTER_NOT_FOUND');
+  }
+}
+
+export class EpisodeNotFoundError extends AppError {
+  constructor(episodeId: number) {
+    super(`Episode ${episodeId} not found`, 404, 'EPISODE_NOT_FOUND');
+  }
+}

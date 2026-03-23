@@ -55,6 +55,16 @@ export const config = {
     model: optional('KOKORO_TTS_MODEL', 'mlx-community/Kokoro-82M-bf16'),
     voiceEn: optional('KOKORO_TTS_VOICE_EN', 'af_heart'),
     voiceZh: optional('KOKORO_TTS_VOICE_ZH', 'zf_xiaobei'),
+    podcastHostAEn: optional('KOKORO_PODCAST_HOST_A_EN', 'af_bella'),
+    podcastHostAZh: optional('KOKORO_PODCAST_HOST_A_ZH', 'zf_xiaoyi'),
+    podcastHostBEn: optional('KOKORO_PODCAST_HOST_B_EN', 'am_adam'),
+    podcastHostBZh: optional('KOKORO_PODCAST_HOST_B_ZH', 'zm_yunxi'),
+    narratorEn: optional('KOKORO_NARRATOR_EN', 'af_bella'),
+    narratorZh: optional('KOKORO_NARRATOR_ZH', 'zf_xiaoyi'),
+  },
+  marker: {
+    baseUrl: optional('MARKER_API_BASE_URL', 'http://localhost:8001'),
+    timeoutMs: optionalInt('MARKER_TIMEOUT_MS', 300_000),
   },
   tts: {
     provider: optional('TTS_PROVIDER', 'elevenlabs') as 'elevenlabs' | 'fishaudio' | 'qwen3tts' | 'kokoro',

@@ -18,3 +18,12 @@ export function countWords(text: string): number {
 export function splitSentences(text: string): string[] {
   return text.match(/[^.!?]+[.!?]+[\s]?|[^.!?]+$/g) || [text];
 }
+
+/**
+ * Detect whether text is primarily Chinese or English.
+ * Returns 'zh' if CJK characters make up > 30% of the text.
+ */
+export function detectLanguage(text: string): 'zh' | 'en' {
+  const cjk = text.match(/[\u4e00-\u9fff]/g)?.length ?? 0;
+  return cjk / text.length > 0.3 ? 'zh' : 'en';
+}

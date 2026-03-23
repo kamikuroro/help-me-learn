@@ -122,3 +122,70 @@ CREATE TABLE agent_artifacts (
 );
 
 CREATE INDEX idx_artifacts_type_topic ON agent_artifacts (type, topic);
+
+-- ============================================================
+-- Books: ingested PDFs for podcast generation
+-- ============================================================
+CREATE TABLE books (
+    id              SERIAL PRIMARY KEY,
+    title           TEXT NOT NULL,
+    author          TEXT,
+    file_path       TEXT NOT NULL,
+    total_pages     INTEGER,
+    total_chapters  INTEGER,
+    language        TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'extracting', 'ready', 'failed')),
+    error_message   TEXT,
+    metadata        JSONB DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_books_status ON books (status);
+
+-- ============================================================
+-- Book Chapters: extracted markdown per chapter
+-- ============================================================
+CREATE TABLE book_chapters (
+    id              SERIAL PRIMARY KEY,
+    book_id         INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    chapter_index   INTEGER NOT NULL,
+    title           TEXT,
+    page_start      INTEGER,
+    page_end        INTEGER,
+    markdown        TEXT,
+    word_count      INTEGER,
+    language        TEXT,
+    source_id       INTEGER REFERENCES sources(id) ON DELETE SET NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'extracting', 'ready', 'failed')),
+    error_message   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (book_id, chapter_index)
+);
+
+CREATE INDEX idx_book_chapters_book ON book_chapters (book_id);
+
+-- ============================================================
+-- Podcast Episodes: generated audio per chapter + mode
+-- ============================================================
+CREATE TABLE podcast_episodes (
+    id              SERIAL PRIMARY KEY,
+    book_id         INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    chapter_id      INTEGER NOT NULL REFERENCES book_chapters(id) ON DELETE CASCADE,
+    mode            TEXT NOT NULL CHECK (mode IN ('verbatim', 'conversational')),
+    script          TEXT,
+    audio_path      TEXT,
+    duration_s      REAL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'scripting', 'synthesizing',
+                                      'concatenating', 'ready', 'failed')),
+    error_message   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (chapter_id, mode)
+);
+
+CREATE INDEX idx_podcast_episodes_book ON podcast_episodes (book_id);
+CREATE INDEX idx_podcast_episodes_status ON podcast_episodes (status);

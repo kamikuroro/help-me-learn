@@ -8,6 +8,8 @@ import { closePool, healthCheck } from './services/db.service.js';
 import { ingestionQueue } from './jobs/ingest.job.js';
 import { ttsQueue } from './jobs/tts.job.js';
 import { digestQueue } from './jobs/digest.job.js';
+import { bookIngestionQueue } from './jobs/book-ingest.job.js';
+import { podcastQueue } from './jobs/podcast.job.js';
 import { preloadKokoroModel } from './services/tts.service.js';
 
 import ingestRoutes from './routes/ingest.routes.js';
@@ -15,6 +17,7 @@ import sourcesRoutes from './routes/sources.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 import audioRoutes from './routes/audio.routes.js';
+import podcastRoutes from './routes/podcast.routes.js';
 
 const app = express();
 
@@ -32,6 +35,8 @@ app.get('/api/health', async (_req, res) => {
       ingestion: ingestionQueue.getStats(),
       tts: ttsQueue.getStats(),
       digest: digestQueue.getStats(),
+      bookIngestion: bookIngestionQueue.getStats(),
+      podcast: podcastQueue.getStats(),
     },
     timestamp: new Date().toISOString(),
   });
@@ -70,6 +75,7 @@ app.use('/api/ingest', authMiddleware, ingestRoutes);
 app.use('/api/sources', authMiddleware, sourcesRoutes);
 app.use('/api/search', authMiddleware, searchRoutes);
 app.use('/api/audio', authMiddleware, audioRoutes);
+app.use('/api', authMiddleware, podcastRoutes);
 app.use('/api', authMiddleware, chatRoutes);
 
 // Error handling
@@ -92,9 +98,13 @@ async function shutdown(signal: string) {
   await ingestionQueue.drain(30_000);
   await ttsQueue.drain(30_000);
   await digestQueue.drain(30_000);
+  await bookIngestionQueue.drain(30_000);
+  await podcastQueue.drain(30_000);
   ingestionQueue.destroy();
   ttsQueue.destroy();
   digestQueue.destroy();
+  bookIngestionQueue.destroy();
+  podcastQueue.destroy();
   await closePool();
   process.exit(0);
 }

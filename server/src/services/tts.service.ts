@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 import { logger } from '../logger.js';
-import { splitSentences } from '../utils/text.js';
+import { splitSentences, detectLanguage } from '../utils/text.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -146,13 +146,7 @@ function splitBySentenceSegments(text: string): string[] {
   return segments;
 }
 
-/**
- * Detect whether text is primarily Chinese or English.
- */
-function detectLanguage(text: string): 'zh' | 'en' {
-  const cjk = text.match(/[\u4e00-\u9fff]/g)?.length ?? 0;
-  return cjk / text.length > 0.3 ? 'zh' : 'en';
-}
+// detectLanguage is imported from utils/text.ts
 
 async function synthesizeSegment(
   text: string,
@@ -292,7 +286,76 @@ async function synthesizeKokoro(
   return { durationSeconds, provider: 'kokoro' };
 }
 
-function concatenateAudio(inputPaths: string[], outputPath: string): Promise<void> {
+/**
+ * Synthesize text with a specific Kokoro voice. Used by podcast pipeline for
+ * per-speaker voice routing.
+ */
+export async function synthesizeWithVoice(
+  text: string,
+  outputPath: string,
+  voice: string,
+  langCode: string,
+): Promise<{ durationSeconds: number }> {
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+  const segments = splitIntoSegments(text);
+  if (segments.length === 0) {
+    throw new Error('No text to synthesize');
+  }
+
+  if (segments.length === 1) {
+    return synthesizeKokoroWithVoice(segments[0], outputPath, voice, langCode);
+  }
+
+  const tempDir = outputPath + '.parts';
+  await fs.mkdir(tempDir, { recursive: true });
+  const partPaths: string[] = [];
+  let totalDuration = 0;
+
+  try {
+    for (let i = 0; i < segments.length; i++) {
+      const partPath = path.join(tempDir, `part-${String(i).padStart(3, '0')}.mp3`);
+      const result = await synthesizeKokoroWithVoice(segments[i], partPath, voice, langCode);
+      partPaths.push(partPath);
+      totalDuration += result.durationSeconds;
+    }
+    await concatenateAudio(partPaths, outputPath);
+    return { durationSeconds: totalDuration };
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function synthesizeKokoroWithVoice(
+  text: string,
+  outputPath: string,
+  voice: string,
+  langCode: string,
+): Promise<{ durationSeconds: number }> {
+  const response = await fetch(`${config.kokoro.baseUrl}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: config.kokoro.model,
+      input: text,
+      voice,
+      lang_code: langCode,
+      response_format: 'mp3',
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Kokoro TTS API error ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fs.writeFile(outputPath, buffer);
+  const durationSeconds = Math.round(buffer.length / 16000);
+  return { durationSeconds };
+}
+
+export function concatenateAudio(inputPaths: string[], outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const listContent = inputPaths.map((p) => `file '${p}'`).join('\n');
     const listPath = outputPath + '.list.txt';
