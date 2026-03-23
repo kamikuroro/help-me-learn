@@ -118,9 +118,7 @@ struct LogEntry: Identifiable {
         if let data = raw.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             self.level = json["level"] as? String ?? "info"
-            self.message = json["msg"] as? String
-                ?? json["event"] as? String
-                ?? raw.prefix(200).description
+            self.message = Self.formatMessage(json)
             if let timeStr = json["time"] as? String {
                 let fmt = ISO8601DateFormatter()
                 fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -132,6 +130,77 @@ struct LogEntry: Identifiable {
             self.level = "info"
             self.message = raw.prefix(200).description
             self.timestamp = Date()
+        }
+    }
+
+    /// Build a human-readable message from structured log fields
+    private static func formatMessage(_ json: [String: Any]) -> String {
+        let event = json["event"] as? String
+        let msg = json["msg"] as? String
+
+        switch event {
+        case "http_request":
+            let method = json["method"] as? String ?? "?"
+            let path = json["path"] as? String ?? "?"
+            let status = json["status"] as? Int ?? 0
+            let duration = json["duration_ms"] as? Int ?? 0
+            return "\(method) \(path) → \(status) (\(duration)ms)"
+
+        case "ingest_start":
+            let sid = json["source_id"] as? Int ?? 0
+            return "Ingestion started #\(sid)"
+
+        case "ingest_complete":
+            let sid = json["source_id"] as? Int ?? 0
+            let dur = json["duration_ms"] as? Int ?? 0
+            return "Ingestion complete #\(sid) (\(dur)ms)"
+
+        case "ingest_failed":
+            let sid = json["source_id"] as? Int ?? 0
+            return "Ingestion FAILED #\(sid)"
+
+        case "ingest_step":
+            let step = json["step"] as? String ?? "?"
+            let sid = json["source_id"] as? Int ?? (json["source_id"] as? String).flatMap { _ in 0 } ?? 0
+            return "Ingest step: \(step) #\(sid)"
+
+        case "claude_invoke":
+            let purpose = json["purpose"] as? String ?? ""
+            let dur = json["duration_ms"] as? Int ?? 0
+            return "Claude (\(dur/1000)s) \(purpose.prefix(40))"
+
+        case "chat_response":
+            let dur = json["duration_ms"] as? Int ?? 0
+            let type = json["type"] as? String ?? ""
+            return "Chat response [\(type)] (\(dur/1000)s)"
+
+        case "tts_start":
+            let sid = json["source_id"] as? Int ?? 0
+            let type = json["type"] as? String ?? ""
+            return "TTS start #\(sid) (\(type))"
+
+        case "tts_complete":
+            let sid = json["source_id"] as? Int ?? 0
+            let dur = json["duration_ms"] as? Int ?? 0
+            return "TTS complete #\(sid) (\(dur/1000)s)"
+
+        case "tts_generate":
+            let chars = json["chars"] as? Int ?? 0
+            let segs = json["segments"] as? Int ?? 0
+            return "TTS generated \(chars) chars, \(segs) segments"
+
+        case "hybrid_search":
+            let hits = json["merged_hits"] as? Int ?? 0
+            let dur = json["duration_ms"] as? Int ?? 0
+            return "Search: \(hits) results (\(dur)ms)"
+
+        case "jina_embed":
+            let batch = json["batch_size"] as? Int ?? 0
+            return "Jina embed batch=\(batch)"
+
+        default:
+            // Fall back to msg, then event, then raw
+            return msg ?? event ?? String(json.description.prefix(200))
         }
     }
 }
