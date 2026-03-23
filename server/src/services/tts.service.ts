@@ -268,6 +268,7 @@ async function synthesizeKokoro(
 ): Promise<{ durationSeconds: number; provider: string }> {
   const language = detectLanguage(text);
   const voice = language === 'zh' ? config.kokoro.voiceZh : config.kokoro.voiceEn;
+  const langCode = language === 'zh' ? 'z' : 'a';
   const response = await fetch(`${config.kokoro.baseUrl}/v1/audio/speech`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -275,6 +276,7 @@ async function synthesizeKokoro(
       model: config.kokoro.model,
       input: text,
       voice,
+      lang_code: langCode,
       response_format: 'mp3',
     }),
   });
