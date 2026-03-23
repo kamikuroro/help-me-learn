@@ -66,6 +66,11 @@ async function extractWithMarker(
   }
 
   const data = (await response.json()) as { markdown: string; metadata: MarkerMetadata };
+
+  if (!data.markdown) {
+    throw new Error('Marker returned empty markdown');
+  }
+
   const duration = Date.now() - start;
 
   logger.info({
@@ -92,26 +97,21 @@ async function extractWithPymupdf4llm(
 
   // Build a Python script that converts PDF to markdown and outputs JSON
   const pagesArg = pageRange ? parsePagesArg(pageRange) : 'None';
-  const script = `
-import pymupdf4llm, pymupdf, json, sys
-try:
-    pages = ${pagesArg}
-    md = pymupdf4llm.to_markdown(${JSON.stringify(filePath)}, pages=pages)
-    doc = pymupdf.open(${JSON.stringify(filePath)})
-    meta = doc.metadata or {}
-    result = {
-        "markdown": md,
-        "metadata": {
-            "total_pages": len(doc),
-            "title": meta.get("title", ""),
-            "author": meta.get("author", "")
-        }
-    }
-    json.dump(result, sys.stdout, ensure_ascii=False)
-except Exception as e:
-    json.dump({"error": str(e)}, sys.stderr)
-    sys.exit(1)
-`;
+  const fileLiteral = JSON.stringify(filePath);
+  // Python script — must not have leading indentation
+  const script = [
+    'import pymupdf4llm, pymupdf, json, sys',
+    'try:',
+    `    pages = ${pagesArg}`,
+    `    md = pymupdf4llm.to_markdown(${fileLiteral}, pages=pages)`,
+    `    doc = pymupdf.open(${fileLiteral})`,
+    '    meta = doc.metadata or {}',
+    '    result = {"markdown": md, "metadata": {"total_pages": len(doc), "title": meta.get("title", ""), "author": meta.get("author", "")}}',
+    '    json.dump(result, sys.stdout, ensure_ascii=False)',
+    'except Exception as e:',
+    '    json.dump({"error": str(e)}, sys.stderr)',
+    '    sys.exit(1)',
+  ].join('\n');
 
   const result = await spawnPython(script, config.marker.timeoutMs);
   const data = JSON.parse(result) as { markdown: string; metadata: MarkerMetadata };

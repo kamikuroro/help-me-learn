@@ -79,10 +79,20 @@ export async function ingestBook(bookId: number): Promise<void> {
     await query("UPDATE books SET status = 'extracting', updated_at = NOW() WHERE id = $1", [bookId]);
 
     const pageRange = (book.metadata as Record<string, unknown>)?.page_range as string | undefined;
-    const { markdown, metadata } = await extractMarkdown(book.file_path, pageRange);
+    logger.info({ event: 'book_extract_starting', file_path: book.file_path, page_range: pageRange });
+    let extractResult;
+    try {
+      extractResult = await extractMarkdown(book.file_path, pageRange);
+    } catch (extractErr) {
+      logger.error({ event: 'book_extract_error', error: (extractErr as Error).message, stack: (extractErr as Error).stack });
+      throw extractErr;
+    }
+    const { markdown, metadata } = extractResult;
 
-    // Update book with metadata from Marker
-    if (metadata.total_pages) {
+    logger.info({ event: 'book_extract_result', provider: extractResult.provider, has_metadata: !!metadata, has_markdown: !!markdown, md_len: markdown?.length });
+
+    // Update book with metadata from extraction
+    if (metadata?.total_pages) {
       await query(
         'UPDATE books SET total_pages = $1, updated_at = NOW() WHERE id = $2',
         [metadata.total_pages, bookId],
