@@ -8,6 +8,7 @@ import { closePool, healthCheck } from './services/db.service.js';
 import { ingestionQueue } from './jobs/ingest.job.js';
 import { ttsQueue } from './jobs/tts.job.js';
 import { digestQueue } from './jobs/digest.job.js';
+import { preloadKokoroModel } from './services/tts.service.js';
 
 import ingestRoutes from './routes/ingest.routes.js';
 import sourcesRoutes from './routes/sources.routes.js';
@@ -80,6 +81,8 @@ const server = app.listen(config.server.port, config.server.host, () => {
     { port: config.server.port, host: config.server.host },
     `Server started on ${config.server.host}:${config.server.port}`,
   );
+  // Preload Kokoro model in mlx-audio (non-blocking)
+  preloadKokoroModel();
 });
 
 // Graceful shutdown

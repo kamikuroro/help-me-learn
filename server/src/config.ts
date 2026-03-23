@@ -52,6 +52,7 @@ export const config = {
   },
   kokoro: {
     baseUrl: optional('KOKORO_TTS_BASE_URL', 'http://localhost:8880'),
+    model: optional('KOKORO_TTS_MODEL', 'mlx-community/Kokoro-82M-bf16'),
     voiceEn: optional('KOKORO_TTS_VOICE_EN', 'af_heart'),
     voiceZh: optional('KOKORO_TTS_VOICE_ZH', 'zf_xiaobei'),
   },

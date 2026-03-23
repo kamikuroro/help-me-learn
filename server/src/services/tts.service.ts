@@ -7,6 +7,29 @@ import { spawn } from 'child_process';
 
 const MAX_SEGMENT_CHARS = 4500;
 
+/**
+ * Preload the Kokoro model in mlx-audio server.
+ * mlx-audio requires models to be loaded via POST /v1/models before use.
+ */
+export async function preloadKokoroModel(): Promise<void> {
+  if (config.tts.provider !== 'kokoro') return;
+
+  try {
+    const response = await fetch(
+      `${config.kokoro.baseUrl}/v1/models?model_name=${encodeURIComponent(config.kokoro.model)}`,
+      { method: 'POST' },
+    );
+    if (!response.ok) {
+      const body = await response.text();
+      logger.warn({ event: 'kokoro_preload_failed', status: response.status, body: body.slice(0, 200) });
+      return;
+    }
+    logger.info({ event: 'kokoro_model_loaded', model: config.kokoro.model });
+  } catch (err) {
+    logger.warn({ event: 'kokoro_preload_failed', error: (err as Error).message });
+  }
+}
+
 export interface TTSResult {
   filePath: string;
   durationSeconds: number;
@@ -249,7 +272,7 @@ async function synthesizeKokoro(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'kokoro',
+      model: config.kokoro.model,
       input: text,
       voice,
       response_format: 'mp3',
