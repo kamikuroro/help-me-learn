@@ -87,6 +87,10 @@ final class APIClient {
         let _: GenerateAudioResponse = try await post("/api/audio/generate/\(sourceId)", body: ["type": type])
     }
 
+    func getAudioQuota() async throws -> AudioQuota {
+        return try await get("/api/audio/quota")
+    }
+
     func audioURL(sourceId: Int, type: String) -> URL? {
         URL(string: "\(baseURL)/api/audio/\(type)/\(sourceId)")
     }
@@ -193,4 +197,19 @@ struct HealthResponse: Codable {
     let status: String
     let db: String
     let timestamp: String
+}
+
+struct AudioQuota: Codable {
+    let characterLimit: Int
+    let characterCount: Int
+    let charactersRemaining: Int
+    let tier: String?
+    let provider: String
+
+    enum CodingKeys: String, CodingKey {
+        case provider, tier
+        case characterLimit = "character_limit"
+        case characterCount = "character_count"
+        case charactersRemaining = "characters_remaining"
+    }
 }

@@ -4,6 +4,7 @@ struct SettingsView: View {
     @State private var settings = SettingsService.shared
     @State private var isCheckingHealth = false
     @State private var healthStatus: String?
+    @State private var quota: AudioQuota?
 
     var body: some View {
         NavigationStack {
@@ -46,6 +47,22 @@ struct SettingsView: View {
                     Toggle("Prefer Summary Audio", isOn: $settings.preferSummaryAudio)
 
                     Toggle("Audio Chat Responses", isOn: $settings.chatAudioEnabled)
+
+                    if let quota {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("ElevenLabs Quota")
+                                Spacer()
+                                Text("\(formatK(quota.characterCount)) / \(formatK(quota.characterLimit))")
+                                    .foregroundStyle(.secondary)
+                            }
+                            ProgressView(value: Double(quota.characterCount), total: Double(max(quota.characterLimit, 1)))
+                                .tint(quota.charactersRemaining < 5000 ? .orange : .blue)
+                            Text("\(formatK(quota.charactersRemaining)) characters remaining")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Section("Developer") {
@@ -61,7 +78,17 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .task {
+                do { quota = try await APIClient.shared.getAudioQuota() } catch {}
+            }
         }
+    }
+
+    private func formatK(_ n: Int) -> String {
+        if n >= 1000 {
+            return String(format: "%.1fk", Double(n) / 1000.0)
+        }
+        return "\(n)"
     }
 
     private func checkHealth() {

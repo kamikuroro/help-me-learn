@@ -14,6 +14,8 @@ struct Source: Codable, Identifiable {
     let audioFullDurationS: Double?
     let audioSummaryPath: String?
     let audioSummaryDurationS: Double?
+    let summaryChars: Int?
+    let contentChars: Int?
     let createdAt: String
     let updatedAt: String
 
@@ -25,6 +27,8 @@ struct Source: Codable, Identifiable {
         case audioFullDurationS = "audio_full_duration_s"
         case audioSummaryPath = "audio_summary_path"
         case audioSummaryDurationS = "audio_summary_duration_s"
+        case summaryChars = "summary_chars"
+        case contentChars = "content_chars"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }

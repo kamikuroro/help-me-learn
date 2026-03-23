@@ -70,7 +70,7 @@ struct SourceRowView: View {
                             onGenerateAudio("summary")
                             pollForAudio(type: "summary")
                         }) {
-                            Label("Gen Summary", systemImage: "waveform")
+                            Label("Gen Summary\(formatChars(source.summaryChars))", systemImage: "waveform")
                                 .font(.caption)
                         }
                     }
@@ -95,7 +95,7 @@ struct SourceRowView: View {
                             onGenerateAudio("full")
                             pollForAudio(type: "full")
                         }) {
-                            Label("Gen Full", systemImage: "waveform")
+                            Label("Gen Full\(formatChars(source.contentChars))", systemImage: "waveform")
                                 .font(.caption)
                         }
                     }
@@ -135,6 +135,15 @@ struct SourceRowView: View {
             if type == "summary" { generatingSummary = false }
             else { generatingFull = false }
         }
+    }
+
+    private func formatChars(_ count: Int?) -> String {
+        guard let count, count > 0 else { return "" }
+        if count >= 1000 {
+            let k = Double(count) / 1000.0
+            return " (~\(String(format: "%.1f", k))k)"
+        }
+        return " (~\(count))"
     }
 }
 

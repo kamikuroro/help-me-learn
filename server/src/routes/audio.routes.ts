@@ -2,11 +2,43 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod/v4';
 import { queryOne } from '../services/db.service.js';
 import { ttsQueue } from '../jobs/tts.job.js';
+import { config } from '../config.js';
 import { SourceNotFoundError, ValidationError } from '../types/errors.js';
 import fs from 'fs';
 import fsp from 'fs/promises';
 
 const router = Router();
+
+// GET /api/audio/quota — ElevenLabs character usage and remaining quota
+router.get('/quota', async (_req: Request, res: Response) => {
+  if (!config.elevenlabs.apiKey) {
+    res.json({ character_limit: 0, character_count: 0, characters_remaining: 0, provider: 'none' });
+    return;
+  }
+
+  const response = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+    headers: { 'xi-api-key': config.elevenlabs.apiKey },
+  });
+
+  if (!response.ok) {
+    res.status(502).json({ error: 'Failed to fetch ElevenLabs quota' });
+    return;
+  }
+
+  const data = await response.json() as {
+    character_count: number;
+    character_limit: number;
+    tier?: string;
+  };
+
+  res.json({
+    character_limit: data.character_limit,
+    character_count: data.character_count,
+    characters_remaining: data.character_limit - data.character_count,
+    tier: data.tier || 'unknown',
+    provider: 'elevenlabs',
+  });
+});
 
 const generateSchema = z.object({
   type: z.enum(['full', 'summary']),

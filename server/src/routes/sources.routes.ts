@@ -34,6 +34,7 @@ router.get('/', async (req: Request, res: Response) => {
     `SELECT id, url, title, summary, category, tags, status, error_message,
             word_count, audio_full_path, audio_full_duration_s,
             audio_summary_path, audio_summary_duration_s,
+            LENGTH(summary) AS summary_chars, LENGTH(raw_content) AS content_chars,
             created_at, updated_at
      FROM sources ${whereClause}
      ORDER BY created_at DESC
@@ -58,6 +59,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     `SELECT id, url, title, raw_content, summary, category, tags, status, error_message,
             word_count, audio_full_path, audio_full_duration_s,
             audio_summary_path, audio_summary_duration_s,
+            LENGTH(summary) AS summary_chars, LENGTH(raw_content) AS content_chars,
             created_at, updated_at
      FROM sources WHERE id = $1`,
     [id],
