@@ -181,8 +181,7 @@ async function summarizeContent(content: string, title: string): Promise<Summari
 
 Respond with ONLY the JSON object, no markdown code blocks.`;
 
-  const truncated = content.length > 100_000 ? content.slice(0, 100_000) + '\n\n[Content truncated]' : content;
-  const prompt = title ? `Title: ${title}\n\n${truncated}` : truncated;
+  const prompt = title ? `Title: ${title}\n\n${content}` : content;
 
   const result = await invokeClaudeJson<SummarizationResult>({
     prompt,
