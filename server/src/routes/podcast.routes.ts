@@ -334,4 +334,40 @@ router.post('/podcast/episodes/:id/regenerate', async (req: Request, res: Respon
   res.status(202).json({ message: 'Episode regeneration started', episode_id: id });
 });
 
+// DELETE /api/books/:id — Delete a book, its chapters, episodes, linked sources, and audio files
+router.delete('/books/:id', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) throw new ValidationError('Invalid book ID');
+
+  const book = await queryOne<{ id: number }>('SELECT id FROM books WHERE id = $1', [id]);
+  if (!book) throw new BookNotFoundError(id);
+
+  // Clean up audio files on disk
+  const episodes = await queryMany<{ audio_path: string | null }>(
+    'SELECT audio_path FROM podcast_episodes WHERE book_id = $1',
+    [id],
+  );
+  for (const ep of episodes) {
+    if (ep.audio_path) {
+      await fsp.unlink(ep.audio_path).catch(() => {});
+    }
+  }
+
+  // Delete linked sources (and their chunks via CASCADE)
+  const chapters = await queryMany<{ source_id: number | null }>(
+    'SELECT source_id FROM book_chapters WHERE book_id = $1 AND source_id IS NOT NULL',
+    [id],
+  );
+  for (const ch of chapters) {
+    if (ch.source_id) {
+      await query('DELETE FROM sources WHERE id = $1', [ch.source_id]);
+    }
+  }
+
+  // Delete book (chapters + episodes cascade)
+  await query('DELETE FROM books WHERE id = $1', [id]);
+
+  res.json({ message: `Book ${id} deleted` });
+});
+
 export default router;

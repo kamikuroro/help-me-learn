@@ -158,6 +158,10 @@ final class APIClient {
         return try await post("/api/podcast/episodes/\(id)/regenerate", body: ["regenerate_script": regenerateScript])
     }
 
+    func deleteBook(id: Int) async throws {
+        let _: EmptyResponse = try await delete("/api/books/\(id)")
+    }
+
     func podcastAudioURL(episodeId: Int) -> URL? {
         URL(string: "\(baseURL)/api/podcast/episodes/\(episodeId)/audio")
     }
