@@ -162,6 +162,7 @@ CREATE TABLE book_chapters (
                     CHECK (status IN ('pending', 'extracting', 'ready', 'failed')),
     error_message   TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (book_id, chapter_index)
 );
 
