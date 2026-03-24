@@ -121,11 +121,18 @@ final class AudioLibraryViewModel {
         downloadingItemId = item.id
         defer { downloadingItemId = nil }
         do {
-            return try await APIClient.shared.downloadAudio(
-                sourceId: item.sourceId,
-                type: item.type,
-                title: item.title
-            )
+            if let episodeId = item.episodeId {
+                return try await APIClient.shared.downloadEpisodeAudio(
+                    episodeId: episodeId,
+                    title: item.title
+                )
+            } else {
+                return try await APIClient.shared.downloadAudio(
+                    sourceId: item.sourceId,
+                    type: item.type,
+                    title: item.title
+                )
+            }
         } catch {
             self.error = error.localizedDescription
             return nil

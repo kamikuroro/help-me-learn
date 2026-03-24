@@ -211,6 +211,25 @@ final class APIClient {
         let _: EmptyResponse = try await delete("/api/podcast/episodes/\(id)")
     }
 
+    func downloadEpisodeAudio(episodeId: Int, title: String?) async throws -> URL {
+        guard var request = podcastAudioRequest(episodeId: episodeId) else {
+            throw APIError.invalidURL
+        }
+        request.timeoutInterval = 120
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0, "Download failed")
+        }
+
+        let filename = "\(title ?? "episode")-\(episodeId).mp3"
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try data.write(to: tempURL)
+        return tempURL
+    }
+
     func podcastAudioURL(episodeId: Int) -> URL? {
         URL(string: "\(baseURL)/api/podcast/episodes/\(episodeId)/audio")
     }
