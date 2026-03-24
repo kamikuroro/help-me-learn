@@ -1,10 +1,9 @@
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { query, queryOne, queryMany } from './db.service.js';
-import { extractMarkdown, splitIntoChapters } from './pdf.service.js';
+import { extractTOC, extractPageRange } from './pdf.service.js';
 import { generateVerbatimScript, generateConversationalScript } from './script-generation.service.js';
 import { synthesizeWithVoice, concatenateAudio } from './tts.service.js';
-import { createSource, runIngestionPipeline } from './ingestion.service.js';
 import { detectLanguage, countWords } from '../utils/text.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -65,124 +64,143 @@ export function getVoiceForSpeaker(speaker: Speaker, language: 'en' | 'zh'): str
 }
 
 /**
- * Ingest a book: extract PDF via Marker, split into chapters, store in DB,
- * and run the existing ingestion pipeline for each chapter (so they appear in RAG/chat).
+ * Process a book upload: extract TOC from PDF and store chapter metadata.
+ * Does NOT extract full markdown — that happens on demand when episodes are generated.
  */
-export async function ingestBook(bookId: number): Promise<void> {
-  const book = await queryOne<{ id: number; file_path: string; title: string; metadata: Record<string, unknown> }>(
-    'SELECT id, file_path, title, metadata FROM books WHERE id = $1',
+export async function processBookUpload(bookId: number): Promise<void> {
+  const book = await queryOne<{ id: number; file_path: string; title: string; author: string | null }>(
+    'SELECT id, file_path, title, author FROM books WHERE id = $1',
     [bookId],
   );
   if (!book) throw new Error(`Book ${bookId} not found`);
 
   try {
-    await query("UPDATE books SET status = 'extracting', updated_at = NOW() WHERE id = $1", [bookId]);
+    await query("UPDATE books SET status = 'processing_toc', updated_at = NOW() WHERE id = $1", [bookId]);
 
-    const pageRange = (book.metadata as Record<string, unknown>)?.page_range as string | undefined;
-    logger.info({ event: 'book_extract_starting', file_path: book.file_path, page_range: pageRange });
-    let extractResult;
-    try {
-      extractResult = await extractMarkdown(book.file_path, pageRange);
-    } catch (extractErr) {
-      logger.error({ event: 'book_extract_error', error: (extractErr as Error).message, stack: (extractErr as Error).stack });
-      throw extractErr;
+    const toc = await extractTOC(book.file_path);
+
+    // Update book metadata (only if user didn't provide)
+    const updates: string[] = [];
+    const values: unknown[] = [];
+    let paramIndex = 1;
+
+    if (toc.totalPages) {
+      updates.push(`total_pages = $${paramIndex++}`);
+      values.push(toc.totalPages);
     }
-    const { markdown, metadata } = extractResult;
+    if (toc.title && book.title === 'Untitled Book') {
+      updates.push(`title = $${paramIndex++}`);
+      values.push(toc.title);
+    }
+    if (toc.author && !book.author) {
+      updates.push(`author = $${paramIndex++}`);
+      values.push(toc.author);
+    }
 
-    logger.info({ event: 'book_extract_result', provider: extractResult.provider, has_metadata: !!metadata, has_markdown: !!markdown, md_len: markdown?.length });
+    if (updates.length > 0) {
+      updates.push(`updated_at = NOW()`);
+      values.push(bookId);
+      await query(`UPDATE books SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
+    }
 
-    // Update book with metadata from extraction
-    if (metadata?.total_pages) {
-      await query(
-        'UPDATE books SET total_pages = $1, updated_at = NOW() WHERE id = $2',
-        [metadata.total_pages, bookId],
+    // Insert chapter metadata (TOC only, no markdown)
+    for (let i = 0; i < toc.chapters.length; i++) {
+      const ch = toc.chapters[i];
+      await queryOne<{ id: number }>(
+        `INSERT INTO book_chapters (book_id, chapter_index, title, page_start, page_end, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')
+         ON CONFLICT (book_id, chapter_index) DO NOTHING
+         RETURNING id`,
+        [bookId, i, ch.title, ch.pageStart, ch.pageEnd],
       );
     }
-
-    // Split into chapters
-    const chapters = splitIntoChapters(markdown);
-    const bookLanguage = detectLanguage(markdown);
 
     await query(
-      'UPDATE books SET total_chapters = $1, language = $2, updated_at = NOW() WHERE id = $3',
-      [chapters.length, bookLanguage, bookId],
+      "UPDATE books SET status = 'ready', total_chapters = $1, updated_at = NOW() WHERE id = $2",
+      [toc.chapters.length, bookId],
     );
 
-    // Store each chapter and run ingestion pipeline
-    for (const chapter of chapters) {
-      const chapterLang = detectLanguage(chapter.markdown);
-      const words = countWords(chapter.markdown);
-
-      const row = await queryOne<{ id: number }>(
-        `INSERT INTO book_chapters (book_id, chapter_index, title, markdown, word_count, language, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'ready')
-         RETURNING id`,
-        [bookId, chapter.index, chapter.title, chapter.markdown, words, chapterLang],
-      );
-
-      const chapterId = row!.id;
-
-      // Create a source record so this chapter is searchable via RAG
-      try {
-        const bookUrl = `book://${bookId}/ch/${chapter.index}`;
-        const sourceId = await createSource(bookUrl);
-        await runIngestionPipeline(sourceId, chapter.markdown, `${book.title} — ${chapter.title}`);
-
-        await query(
-          'UPDATE book_chapters SET source_id = $1 WHERE id = $2',
-          [sourceId, chapterId],
-        );
-      } catch (err) {
-        // Log but don't fail the whole book ingestion if one chapter's RAG ingestion fails
-        logger.warn({
-          event: 'chapter_rag_failed',
-          book_id: bookId,
-          chapter_index: chapter.index,
-          error: (err as Error).message,
-        });
-      }
-    }
-
-    await query("UPDATE books SET status = 'ready', updated_at = NOW() WHERE id = $1", [bookId]);
-    logger.info({ event: 'book_ingest_complete', book_id: bookId, chapters: chapters.length });
+    logger.info({ event: 'book_upload_complete', book_id: bookId, chapters: toc.chapters.length, pages: toc.totalPages });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await query(
       "UPDATE books SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2",
       [message.slice(0, 1000), bookId],
     );
-    logger.error({ event: 'book_ingest_failed', book_id: bookId, err: error });
+    logger.error({ event: 'book_upload_failed', book_id: bookId, err: error });
     throw error;
   }
 }
 
 /**
  * Generate a podcast episode: create script via Claude, then synthesize audio.
+ * Supports both chapter-based and page-range episodes.
  */
 export async function generateEpisode(episodeId: number): Promise<void> {
   const episode = await queryOne<{
     id: number;
     book_id: number;
-    chapter_id: number;
+    chapter_id: number | null;
     mode: 'verbatim' | 'conversational';
     script: string | null;
+    page_start: number | null;
+    page_end: number | null;
+    title: string | null;
   }>(
-    'SELECT id, book_id, chapter_id, mode, script FROM podcast_episodes WHERE id = $1',
+    'SELECT id, book_id, chapter_id, mode, script, page_start, page_end, title FROM podcast_episodes WHERE id = $1',
     [episodeId],
   );
   if (!episode) throw new Error(`Episode ${episodeId} not found`);
 
-  const chapter = await queryOne<{ id: number; title: string; markdown: string; language: string }>(
-    'SELECT id, title, markdown, language FROM book_chapters WHERE id = $1',
-    [episode.chapter_id],
-  );
-  if (!chapter) throw new Error(`Chapter ${episode.chapter_id} not found`);
-
-  const book = await queryOne<{ title: string }>(
-    'SELECT title FROM books WHERE id = $1',
+  const book = await queryOne<{ title: string; file_path: string }>(
+    'SELECT title, file_path FROM books WHERE id = $1',
     [episode.book_id],
   );
   if (!book) throw new Error(`Book ${episode.book_id} not found`);
+
+  // Resolve content: either from a chapter or a page range
+  let contentMarkdown: string;
+  let contentTitle: string;
+  let contentLanguage: string;
+
+  if (episode.chapter_id) {
+    const chapter = await queryOne<{
+      id: number; title: string; markdown: string | null; language: string | null;
+      page_start: number | null; page_end: number | null;
+    }>(
+      'SELECT id, title, markdown, language, page_start, page_end FROM book_chapters WHERE id = $1',
+      [episode.chapter_id],
+    );
+    if (!chapter) throw new Error(`Chapter ${episode.chapter_id} not found`);
+
+    // On-demand extraction if markdown is missing
+    if (!chapter.markdown) {
+      if (chapter.page_start == null || chapter.page_end == null) {
+        throw new Error(`Chapter ${chapter.id} has no markdown and no page range for extraction`);
+      }
+      const extracted = await extractPageRange(book.file_path, chapter.page_start, chapter.page_end);
+      chapter.markdown = extracted.markdown;
+      const lang = detectLanguage(chapter.markdown);
+      const words = countWords(chapter.markdown);
+      await query(
+        "UPDATE book_chapters SET markdown = $1, language = $2, word_count = $3, status = 'ready', updated_at = NOW() WHERE id = $4",
+        [chapter.markdown, lang, words, chapter.id],
+      );
+      chapter.language = lang;
+    }
+
+    contentMarkdown = chapter.markdown;
+    contentTitle = chapter.title || 'Untitled';
+    contentLanguage = chapter.language || 'en';
+  } else if (episode.page_start != null && episode.page_end != null) {
+    // Page-range episode (no chapter)
+    const extracted = await extractPageRange(book.file_path, episode.page_start, episode.page_end);
+    contentMarkdown = extracted.markdown;
+    contentTitle = episode.title || `Pages ${episode.page_start}\u2013${episode.page_end}`;
+    contentLanguage = detectLanguage(contentMarkdown);
+  } else {
+    throw new Error(`Episode ${episodeId} has neither chapter_id nor page range`);
+  }
 
   try {
     // Step 1: Generate script (skip if already present, e.g., on regenerate with regenerate_script=false)
@@ -195,11 +213,11 @@ export async function generateEpisode(episodeId: number): Promise<void> {
 
       if (episode.mode === 'verbatim') {
         script = await generateVerbatimScript(
-          chapter.markdown, chapter.title || 'Untitled', book.title, chapter.language || 'en',
+          contentMarkdown, contentTitle, book.title, contentLanguage,
         );
       } else {
         script = await generateConversationalScript(
-          chapter.markdown, chapter.title || 'Untitled', book.title, chapter.language || 'en',
+          contentMarkdown, contentTitle, book.title, contentLanguage,
         );
       }
 
@@ -220,7 +238,7 @@ export async function generateEpisode(episodeId: number): Promise<void> {
       throw new Error('Script produced no parseable segments');
     }
 
-    const language = (chapter.language === 'zh' ? 'zh' : 'en') as 'en' | 'zh';
+    const language = (contentLanguage === 'zh' ? 'zh' : 'en') as 'en' | 'zh';
     const langCode = language === 'zh' ? 'z' : 'a';
 
     const episodeDir = path.join(config.audio.dir, 'podcast', String(episode.book_id));
@@ -258,9 +276,12 @@ export async function generateEpisode(episodeId: number): Promise<void> {
         [episodeId],
       );
 
+      const fileLabel = episode.chapter_id
+        ? `ch${String(episode.chapter_id).padStart(3, '0')}`
+        : `p${episode.page_start}-${episode.page_end}`;
       const outputPath = path.join(
         episodeDir,
-        `ch${String(chapter.id).padStart(3, '0')}-${episode.mode}.mp3`,
+        `${fileLabel}-${episode.mode}.mp3`,
       );
       await concatenateAudio(partPaths, outputPath);
 

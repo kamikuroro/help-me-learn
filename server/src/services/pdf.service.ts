@@ -181,6 +181,74 @@ function spawnPython(script: string, timeoutMs: number): Promise<string> {
 }
 
 /**
+ * Extract table of contents from a PDF using pymupdf.
+ */
+export async function extractTOC(filePath: string): Promise<{
+  totalPages: number;
+  title: string;
+  author: string;
+  chapters: Array<{ level: number; title: string; pageStart: number; pageEnd: number }>;
+}> {
+  const fileLiteral = JSON.stringify(filePath);
+  const script = [
+    'import sys, json, pymupdf',
+    `doc = pymupdf.open(${fileLiteral})`,
+    'toc = doc.get_toc()',
+    'meta = doc.metadata or {}',
+    'result = {',
+    '    "total_pages": len(doc),',
+    '    "title": meta.get("title", ""),',
+    '    "author": meta.get("author", ""),',
+    '    "chapters": []',
+    '}',
+    'for i, entry in enumerate(toc):',
+    '    level, title, page = entry',
+    '    page_end = toc[i+1][2] - 1 if i + 1 < len(toc) else len(doc)',
+    '    result["chapters"].append({',
+    '        "level": level,',
+    '        "title": title,',
+    '        "pageStart": page,',
+    '        "pageEnd": page_end',
+    '    })',
+    'doc.close()',
+    'print(json.dumps(result))',
+  ].join('\n');
+
+  const output = await spawnPython(script, config.marker.timeoutMs);
+  const data = JSON.parse(output) as {
+    total_pages: number;
+    title: string;
+    author: string;
+    chapters: Array<{ level: number; title: string; pageStart: number; pageEnd: number }>;
+  };
+
+  logger.info({
+    event: 'pdf_toc_extracted',
+    file_path: filePath,
+    total_pages: data.total_pages,
+    chapters: data.chapters.length,
+  });
+
+  return {
+    totalPages: data.total_pages,
+    title: data.title,
+    author: data.author,
+    chapters: data.chapters,
+  };
+}
+
+/**
+ * Extract markdown for a specific page range from a PDF.
+ */
+export async function extractPageRange(
+  filePath: string,
+  pageStart: number,
+  pageEnd: number,
+): Promise<PdfExtractResult> {
+  return extractMarkdown(filePath, `${pageStart}-${pageEnd}`);
+}
+
+/**
  * Split extracted markdown into chapters by heading boundaries.
  * Tries H1 first, falls back to H2, then treats entire content as one chapter.
  */

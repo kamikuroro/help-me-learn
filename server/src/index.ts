@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'path';
+import fsMod from 'fs';
 import { config } from './config.js';
 import { logger, logBroadcast } from './logger.js';
 import { requestLogger } from './middleware/request-logger.js';
@@ -20,6 +22,9 @@ import audioRoutes from './routes/audio.routes.js';
 import podcastRoutes from './routes/podcast.routes.js';
 
 const app = express();
+
+// Ensure required directories exist
+fsMod.mkdirSync(path.join(config.audio.dir, 'books'), { recursive: true });
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));

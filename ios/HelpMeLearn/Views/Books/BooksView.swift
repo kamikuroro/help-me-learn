@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BooksView: View {
     @State private var viewModel = BooksViewModel()
+    @State private var showUploadSheet = false
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,18 @@ struct BooksView: View {
                 }
             }
             .navigationTitle("Books")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showUploadSheet = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $showUploadSheet) {
+                BookUploadView(viewModel: viewModel)
+            }
             .navigationDestination(for: Int.self) { bookId in
                 BookDetailView(bookId: bookId)
             }

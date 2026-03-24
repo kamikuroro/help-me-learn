@@ -83,7 +83,7 @@ final class AudioLibraryViewModel {
             for book in books where book.isReady {
                 let episodes = try await APIClient.shared.listEpisodes(bookId: book.id)
                 for episode in episodes where episode.isReady {
-                    let chapterTitle = episode.chapterTitle ?? "Chapter \(episode.chapterIndex + 1)"
+                    let chapterTitle = episode.chapterTitle ?? (episode.chapterIndex.map { "Chapter \($0 + 1)" } ?? "Custom Range")
                     audioItems.append(AudioItem(
                         id: "episode-\(episode.id)",
                         sourceId: book.id,

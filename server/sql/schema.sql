@@ -135,7 +135,7 @@ CREATE TABLE books (
     total_chapters  INTEGER,
     language        TEXT,
     status          TEXT NOT NULL DEFAULT 'pending'
-                    CHECK (status IN ('pending', 'extracting', 'ready', 'failed')),
+                    CHECK (status IN ('pending', 'processing_toc', 'extracting', 'ready', 'failed')),
     error_message   TEXT,
     metadata        JSONB DEFAULT '{}',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -173,8 +173,11 @@ CREATE INDEX idx_book_chapters_book ON book_chapters (book_id);
 CREATE TABLE podcast_episodes (
     id              SERIAL PRIMARY KEY,
     book_id         INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    chapter_id      INTEGER NOT NULL REFERENCES book_chapters(id) ON DELETE CASCADE,
+    chapter_id      INTEGER REFERENCES book_chapters(id) ON DELETE SET NULL,
     mode            TEXT NOT NULL CHECK (mode IN ('verbatim', 'conversational')),
+    title           TEXT,
+    page_start      INTEGER,
+    page_end        INTEGER,
     script          TEXT,
     audio_path      TEXT,
     duration_s      REAL,
@@ -183,8 +186,7 @@ CREATE TABLE podcast_episodes (
                                       'concatenating', 'ready', 'failed')),
     error_message   TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (chapter_id, mode)
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_podcast_episodes_book ON podcast_episodes (book_id);

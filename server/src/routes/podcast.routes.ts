@@ -1,5 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod/v4';
+import multer from 'multer';
+import path from 'path';
+import { config } from '../config.js';
 import { queryOne, queryMany, query } from '../services/db.service.js';
 import { bookIngestionQueue } from '../jobs/book-ingest.job.js';
 import { podcastQueue } from '../jobs/podcast.job.js';
@@ -13,41 +16,51 @@ import fsp from 'fs/promises';
 
 const router = Router();
 
-// ------- Books -------
+// ------- Multer setup -------
 
-const createBookSchema = z.object({
-  file_path: z.string(),
-  page_range: z.string().optional(),
-  title: z.string().optional(),
-  author: z.string().optional(),
+const upload = multer({
+  dest: path.join(config.audio.dir, 'books', 'uploads'),
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    cb(null, file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf'));
+  },
 });
 
-// POST /api/books — Ingest a PDF book
-router.post('/books', async (req: Request, res: Response) => {
-  const parsed = createBookSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new ValidationError(`Invalid request: ${parsed.error.message}`);
+// ------- Books -------
+
+// POST /api/books — Upload a PDF book
+router.post('/books', upload.single('file'), async (req: Request, res: Response) => {
+  if (!req.file) {
+    throw new ValidationError('A PDF file is required');
   }
 
-  const { file_path, page_range, title, author } = parsed.data;
+  const title = (req.body.title as string) || 'Untitled Book';
+  const author = (req.body.author as string) || null;
 
-  const metadata: Record<string, unknown> = {};
-  if (page_range) metadata.page_range = page_range;
-
+  // Insert book row with temp file path
   const row = await queryOne<{ id: number }>(
-    `INSERT INTO books (title, author, file_path, metadata, status)
-     VALUES ($1, $2, $3, $4, 'pending')
+    `INSERT INTO books (title, author, file_path, status)
+     VALUES ($1, $2, $3, 'pending')
      RETURNING id`,
-    [title || 'Untitled Book', author || null, file_path, JSON.stringify(metadata)],
+    [title, author, req.file.path],
   );
 
   const bookId = row!.id;
+
+  // Rename uploaded file to a permanent path
+  const permanentPath = path.join(config.audio.dir, 'books', `${bookId}.pdf`);
+  await fsp.rename(req.file.path, permanentPath);
+
+  // Update file_path in DB
+  await query('UPDATE books SET file_path = $1 WHERE id = $2', [permanentPath, bookId]);
+
+  // Queue TOC extraction
   bookIngestionQueue.add({ bookId });
 
   res.status(202).json({
     id: bookId,
     status: 'pending',
-    message: 'Book ingestion started',
+    message: 'Book upload started',
   });
 });
 
@@ -94,15 +107,65 @@ router.get('/books/:id', async (req: Request, res: Response) => {
     id: number;
     chapter_index: number;
     title: string | null;
+    page_start: number | null;
+    page_end: number | null;
     word_count: number | null;
     language: string | null;
     status: string;
   }>(
-    'SELECT id, chapter_index, title, word_count, language, status FROM book_chapters WHERE book_id = $1 ORDER BY chapter_index',
+    'SELECT id, chapter_index, title, page_start, page_end, word_count, language, status FROM book_chapters WHERE book_id = $1 ORDER BY chapter_index',
     [id],
   );
 
   res.json({ ...book, chapters });
+});
+
+// GET /api/books/:id/pdf — Stream the book's PDF file
+router.get('/books/:id/pdf', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) throw new ValidationError('Invalid book ID');
+
+  const book = await queryOne<{ file_path: string }>(
+    'SELECT file_path FROM books WHERE id = $1',
+    [id],
+  );
+  if (!book) throw new BookNotFoundError(id);
+
+  try {
+    const stat = await fsp.stat(book.file_path);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = end - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': 'application/pdf',
+      });
+
+      const stream = fs.createReadStream(book.file_path, { start, end });
+      req.on('close', () => stream.destroy());
+      stream.pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Content-Type': 'application/pdf',
+        'Accept-Ranges': 'bytes',
+      });
+
+      const stream = fs.createReadStream(book.file_path);
+      req.on('close', () => stream.destroy());
+      stream.pipe(res);
+    }
+  } catch {
+    res.status(404).json({ error: 'PDF file not found on disk' });
+  }
 });
 
 // ------- Episodes -------
@@ -110,7 +173,14 @@ router.get('/books/:id', async (req: Request, res: Response) => {
 const createEpisodesSchema = z.object({
   mode: z.enum(['verbatim', 'conversational']),
   chapters: z.array(z.number()).optional(),
-});
+  page_range: z.object({
+    start: z.number().int().positive(),
+    end: z.number().int().positive(),
+  }).optional(),
+}).refine(
+  d => !(d.chapters && d.page_range),
+  'Specify chapters or page_range, not both',
+);
 
 // POST /api/books/:id/episodes — Generate podcast episodes
 router.post('/books/:id/episodes', async (req: Request, res: Response) => {
@@ -131,59 +201,74 @@ router.post('/books/:id/episodes', async (req: Request, res: Response) => {
     throw new ValidationError(`Book must be in ready state (current: ${book.status})`);
   }
 
-  const { mode, chapters: chapterIndices } = parsed.data;
-
-  // Get target chapters
-  let chapters: { id: number; chapter_index: number }[];
-  if (chapterIndices && chapterIndices.length > 0) {
-    chapters = await queryMany<{ id: number; chapter_index: number }>(
-      'SELECT id, chapter_index FROM book_chapters WHERE book_id = $1 AND chapter_index = ANY($2) ORDER BY chapter_index',
-      [bookId, chapterIndices],
-    );
-  } else {
-    chapters = await queryMany<{ id: number; chapter_index: number }>(
-      'SELECT id, chapter_index FROM book_chapters WHERE book_id = $1 ORDER BY chapter_index',
-      [bookId],
-    );
-  }
-
-  if (chapters.length === 0) {
-    throw new ValidationError('No chapters found for the specified criteria');
-  }
+  const { mode, chapters: chapterIndices, page_range } = parsed.data;
 
   const episodeIds: number[] = [];
 
-  for (const chapter of chapters) {
-    // Upsert: skip if episode already exists for this chapter+mode
-    const existing = await queryOne<{ id: number; status: string }>(
-      'SELECT id, status FROM podcast_episodes WHERE chapter_id = $1 AND mode = $2',
-      [chapter.id, mode],
-    );
-
-    if (existing) {
-      if (existing.status === 'ready' || existing.status === 'failed') {
-        // Reset for re-generation
-        await query(
-          "UPDATE podcast_episodes SET status = 'pending', script = NULL, error_message = NULL, updated_at = NOW() WHERE id = $1",
-          [existing.id],
-        );
-        podcastQueue.add({ episodeId: existing.id });
-        episodeIds.push(existing.id);
-      }
-      // Skip if already in progress
-      continue;
-    }
-
+  if (page_range) {
+    // Page-range episode (no chapter)
+    const episodeTitle = `Pages ${page_range.start}\u2013${page_range.end}`;
     const row = await queryOne<{ id: number }>(
-      `INSERT INTO podcast_episodes (book_id, chapter_id, mode, status)
-       VALUES ($1, $2, $3, 'pending')
+      `INSERT INTO podcast_episodes (book_id, chapter_id, mode, page_start, page_end, title, status)
+       VALUES ($1, NULL, $2, $3, $4, $5, 'pending')
        RETURNING id`,
-      [bookId, chapter.id, mode],
+      [bookId, mode, page_range.start, page_range.end, episodeTitle],
     );
 
     const episodeId = row!.id;
     podcastQueue.add({ episodeId });
     episodeIds.push(episodeId);
+  } else {
+    // Chapter-based episodes
+    let chapters: { id: number; chapter_index: number }[];
+    if (chapterIndices && chapterIndices.length > 0) {
+      chapters = await queryMany<{ id: number; chapter_index: number }>(
+        'SELECT id, chapter_index FROM book_chapters WHERE book_id = $1 AND chapter_index = ANY($2) ORDER BY chapter_index',
+        [bookId, chapterIndices],
+      );
+    } else {
+      chapters = await queryMany<{ id: number; chapter_index: number }>(
+        'SELECT id, chapter_index FROM book_chapters WHERE book_id = $1 ORDER BY chapter_index',
+        [bookId],
+      );
+    }
+
+    if (chapters.length === 0) {
+      throw new ValidationError('No chapters found for the specified criteria');
+    }
+
+    for (const chapter of chapters) {
+      // Upsert: skip if episode already exists for this chapter+mode
+      const existing = await queryOne<{ id: number; status: string }>(
+        'SELECT id, status FROM podcast_episodes WHERE chapter_id = $1 AND mode = $2',
+        [chapter.id, mode],
+      );
+
+      if (existing) {
+        if (existing.status === 'ready' || existing.status === 'failed') {
+          // Reset for re-generation
+          await query(
+            "UPDATE podcast_episodes SET status = 'pending', script = NULL, error_message = NULL, updated_at = NOW() WHERE id = $1",
+            [existing.id],
+          );
+          podcastQueue.add({ episodeId: existing.id });
+          episodeIds.push(existing.id);
+        }
+        // Skip if already in progress
+        continue;
+      }
+
+      const row = await queryOne<{ id: number }>(
+        `INSERT INTO podcast_episodes (book_id, chapter_id, mode, status)
+         VALUES ($1, $2, $3, 'pending')
+         RETURNING id`,
+        [bookId, chapter.id, mode],
+      );
+
+      const episodeId = row!.id;
+      podcastQueue.add({ episodeId });
+      episodeIds.push(episodeId);
+    }
   }
 
   res.status(202).json({
@@ -200,20 +285,25 @@ router.get('/books/:id/episodes', async (req: Request, res: Response) => {
 
   const episodes = await queryMany<{
     id: number;
-    chapter_id: number;
+    chapter_id: number | null;
     chapter_title: string | null;
     chapter_index: number;
     mode: string;
     status: string;
     duration_s: number | null;
     created_at: Date;
+    page_start: number | null;
+    page_end: number | null;
   }>(
-    `SELECT pe.id, pe.chapter_id, bc.title AS chapter_title, bc.chapter_index,
-            pe.mode, pe.status, pe.duration_s, pe.created_at
+    `SELECT pe.id, pe.chapter_id,
+            COALESCE(bc.title, pe.title) AS chapter_title,
+            COALESCE(bc.chapter_index, -1) AS chapter_index,
+            pe.mode, pe.status, pe.duration_s, pe.created_at,
+            pe.page_start, pe.page_end
      FROM podcast_episodes pe
-     JOIN book_chapters bc ON bc.id = pe.chapter_id
+     LEFT JOIN book_chapters bc ON bc.id = pe.chapter_id
      WHERE pe.book_id = $1
-     ORDER BY bc.chapter_index, pe.mode`,
+     ORDER BY COALESCE(bc.chapter_index, 999), pe.mode`,
     [bookId],
   );
 

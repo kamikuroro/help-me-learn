@@ -56,26 +56,39 @@ struct BookChapter: Codable, Identifiable {
     let wordCount: Int?
     let language: String?
     let status: String
+    let pageStart: Int?
+    let pageEnd: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, language
         case chapterIndex = "chapter_index"
         case wordCount = "word_count"
+        case pageStart = "page_start"
+        case pageEnd = "page_end"
     }
 
     var displayTitle: String {
         title ?? "Chapter \(chapterIndex + 1)"
     }
+
+    var hasContent: Bool { status == "ready" }
+
+    var pageRangeLabel: String? {
+        guard let s = pageStart, let e = pageEnd else { return nil }
+        return "pp. \(s)\u{2013}\(e)"
+    }
 }
 
 struct PodcastEpisode: Codable, Identifiable {
     let id: Int
-    let chapterId: Int
+    let chapterId: Int?
     let chapterTitle: String?
-    let chapterIndex: Int
+    let chapterIndex: Int?
     let mode: String
     let status: String
     let durationS: Double?
+    let pageStart: Int?
+    let pageEnd: Int?
     let createdAt: String
 
     enum CodingKeys: String, CodingKey {
@@ -84,6 +97,8 @@ struct PodcastEpisode: Codable, Identifiable {
         case chapterTitle = "chapter_title"
         case chapterIndex = "chapter_index"
         case durationS = "duration_s"
+        case pageStart = "page_start"
+        case pageEnd = "page_end"
         case createdAt = "created_at"
     }
 
@@ -105,7 +120,7 @@ struct PodcastEpisode: Codable, Identifiable {
 struct EpisodeDetail: Codable {
     let id: Int
     let bookId: Int
-    let chapterId: Int
+    let chapterId: Int?
     let mode: String
     let script: String?
     let status: String

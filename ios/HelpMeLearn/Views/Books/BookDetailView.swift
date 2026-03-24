@@ -4,7 +4,7 @@ struct BookDetailView: View {
     let bookId: Int
     @State private var viewModel: BookDetailViewModel
     @State private var audioPlayer = AudioPlayerService.shared
-    @State private var showModeSheet = false
+    @State private var showGenerateSheet = false
 
     init(bookId: Int) {
         self.bookId = bookId
@@ -31,18 +31,23 @@ struct BookDetailView: View {
                         LabeledContent("Status") {
                             StatusBadge(status: book.status)
                         }
+                        NavigationLink {
+                            PDFPreviewView(bookId: bookId)
+                        } label: {
+                            Label("Preview PDF", systemImage: "doc.richtext")
+                        }
                     } header: {
                         Text("Info")
                     }
 
-                    // Generate episodes section
+                    // Generate section
                     if book.isReady {
                         Section {
                             Button {
-                                showModeSheet = true
+                                showGenerateSheet = true
                             } label: {
                                 Label(
-                                    viewModel.isGenerating ? "Generating..." : "Generate Podcast Episodes",
+                                    viewModel.isGenerating ? "Generating..." : "Generate Podcast",
                                     systemImage: "waveform"
                                 )
                             }
@@ -51,25 +56,51 @@ struct BookDetailView: View {
                     }
 
                     // Chapters section
-                    Section {
-                        ForEach(book.chapters) { chapter in
-                            ChapterRowView(
-                                chapter: chapter,
-                                episodes: viewModel.episodesForChapter(chapter.id),
-                                onPlay: { episode in
-                                    audioPlayer.playPodcastEpisode(
-                                        episodeId: episode.id,
-                                        title: "\(book.title) — \(chapter.displayTitle)",
-                                        mode: episode.mode
-                                    )
-                                },
-                                onRegenerate: { episode in
-                                    Task { await viewModel.regenerateEpisode(episode.id) }
-                                }
-                            )
+                    if !book.chapters.isEmpty {
+                        Section {
+                            ForEach(book.chapters) { chapter in
+                                ChapterRowView(
+                                    chapter: chapter,
+                                    episodes: viewModel.episodesForChapter(chapter.id),
+                                    onPlay: { episode in
+                                        audioPlayer.playPodcastEpisode(
+                                            episodeId: episode.id,
+                                            title: "\(book.title) — \(chapter.displayTitle)",
+                                            mode: episode.mode
+                                        )
+                                    },
+                                    onRegenerate: { episode in
+                                        Task { await viewModel.regenerateEpisode(episode.id) }
+                                    }
+                                )
+                            }
+                        } header: {
+                            Text("Chapters (\(book.chapters.count))")
                         }
-                    } header: {
-                        Text("Chapters (\(book.chapters.count))")
+                    }
+
+                    // Page-range episodes (no chapter)
+                    let pageRangeEpisodes = viewModel.episodes.filter { $0.chapterId == nil }
+                    if !pageRangeEpisodes.isEmpty {
+                        Section {
+                            ForEach(pageRangeEpisodes) { episode in
+                                EpisodeRowView(
+                                    episode: episode,
+                                    onPlay: {
+                                        audioPlayer.playPodcastEpisode(
+                                            episodeId: episode.id,
+                                            title: "\(book.title) — \(episode.chapterTitle ?? "Custom Range")",
+                                            mode: episode.mode
+                                        )
+                                    },
+                                    onRegenerate: {
+                                        Task { await viewModel.regenerateEpisode(episode.id) }
+                                    }
+                                )
+                            }
+                        } header: {
+                            Text("Page Range Episodes")
+                        }
                     }
                 }
                 .refreshable { await viewModel.load() }
@@ -85,24 +116,150 @@ struct BookDetailView: View {
         } message: {
             Text(viewModel.error ?? "")
         }
-        .confirmationDialog("Generate Episodes", isPresented: $showModeSheet) {
-            Button("Conversational (Two Hosts)") {
-                Task { await viewModel.generateEpisodes(mode: "conversational") }
-            }
-            Button("Verbatim Narration") {
-                Task { await viewModel.generateEpisodes(mode: "verbatim") }
-            }
-            Button("Both Modes") {
-                Task {
-                    await viewModel.generateEpisodes(mode: "conversational")
-                    await viewModel.generateEpisodes(mode: "verbatim")
+        .sheet(isPresented: $showGenerateSheet) {
+            GeneratePodcastSheet(
+                book: viewModel.book!,
+                isGenerating: viewModel.isGenerating,
+                onGenerate: { mode, chapterIds, pgStart, pgEnd in
+                    Task {
+                        if let pgStart, let pgEnd {
+                            await viewModel.generateEpisodes(mode: mode, pageStart: pgStart, pageEnd: pgEnd)
+                        } else if !chapterIds.isEmpty {
+                            await viewModel.generateEpisodes(mode: mode, chapters: Array(chapterIds))
+                        } else {
+                            await viewModel.generateEpisodes(mode: mode)
+                        }
+                        showGenerateSheet = false
+                    }
                 }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Choose the podcast style for all chapters")
+            )
         }
         .task { await viewModel.load() }
+    }
+}
+
+struct GeneratePodcastSheet: View {
+    let book: BookDetail
+    let isGenerating: Bool
+    let onGenerate: (String, Set<Int>, Int?, Int?) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var mode = "conversational"
+    @State private var usePageRange = false
+    @State private var selectedChapterIds: Set<Int> = []
+    @State private var pageStart = ""
+    @State private var pageEnd = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Mode") {
+                    Picker("Style", selection: $mode) {
+                        Text("Conversational").tag("conversational")
+                        Text("Narration").tag("verbatim")
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("Source") {
+                    Picker("Generate from", selection: $usePageRange) {
+                        Text("Chapters").tag(false)
+                        Text("Page Range").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if usePageRange {
+                    Section("Page Range") {
+                        HStack {
+                            TextField("Start", text: $pageStart)
+                                .keyboardType(.numberPad)
+                            Text("to")
+                                .foregroundStyle(.secondary)
+                            TextField("End", text: $pageEnd)
+                                .keyboardType(.numberPad)
+                        }
+                        if let total = book.totalPages {
+                            Text("Book has \(total) pages")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    Section("Select Chapters") {
+                        if book.chapters.isEmpty {
+                            Text("No chapters detected in this PDF. Use page range instead.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Button(selectedChapterIds.count == book.chapters.count ? "Deselect All" : "Select All") {
+                                if selectedChapterIds.count == book.chapters.count {
+                                    selectedChapterIds.removeAll()
+                                } else {
+                                    selectedChapterIds = Set(book.chapters.map { $0.id })
+                                }
+                            }
+                            .font(.caption)
+
+                            ForEach(book.chapters) { chapter in
+                                Button {
+                                    if selectedChapterIds.contains(chapter.id) {
+                                        selectedChapterIds.remove(chapter.id)
+                                    } else {
+                                        selectedChapterIds.insert(chapter.id)
+                                    }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: selectedChapterIds.contains(chapter.id) ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(selectedChapterIds.contains(chapter.id) ? .blue : .secondary)
+                                        VStack(alignment: .leading) {
+                                            Text(chapter.displayTitle)
+                                                .foregroundStyle(.primary)
+                                            if let range = chapter.pageRangeLabel {
+                                                Text(range)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Generate Podcast")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isGenerating {
+                        ProgressView()
+                    } else {
+                        Button("Generate") {
+                            if usePageRange {
+                                let start = Int(pageStart)
+                                let end = Int(pageEnd)
+                                onGenerate(mode, [], start, end)
+                            } else {
+                                onGenerate(mode, selectedChapterIds, nil, nil)
+                            }
+                        }
+                        .disabled(!canGenerate)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+
+    private var canGenerate: Bool {
+        if usePageRange {
+            guard let s = Int(pageStart), let e = Int(pageEnd), s > 0, e >= s else { return false }
+            return true
+        } else {
+            return !selectedChapterIds.isEmpty || book.chapters.isEmpty
+        }
     }
 }
 
@@ -119,8 +276,8 @@ struct ChapterRowView: View {
                     .font(.headline)
                     .lineLimit(2)
                 Spacer()
-                if let words = chapter.wordCount {
-                    Text("\(words) words")
+                if let range = chapter.pageRangeLabel {
+                    Text(range)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

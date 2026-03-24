@@ -132,17 +132,58 @@ final class APIClient {
         return try await get("/api/books/\(id)")
     }
 
-    func createBook(filePath: String, pageRange: String? = nil, title: String? = nil, author: String? = nil) async throws -> CreateBookResponse {
-        var body: [String: Any] = ["file_path": filePath]
-        if let pageRange { body["page_range"] = pageRange }
-        if let title { body["title"] = title }
-        if let author { body["author"] = author }
-        return try await post("/api/books", body: body)
+    func uploadBook(pdfData: Data, filename: String, title: String?, author: String?) async throws -> CreateBookResponse {
+        guard let url = URL(string: "\(baseURL)/api/books") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 300 // 5 min for large uploads
+
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        // PDF file part
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: application/pdf\r\n\r\n".data(using: .utf8)!)
+        body.append(pdfData)
+        body.append("\r\n".data(using: .utf8)!)
+        // Title
+        if let title {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"title\"\r\n\r\n\(title)\r\n".data(using: .utf8)!)
+        }
+        // Author
+        if let author {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"author\"\r\n\r\n\(author)\r\n".data(using: .utf8)!)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+
+        return try await execute(request)
     }
 
-    func generateEpisodes(bookId: Int, mode: String, chapters: [Int]? = nil) async throws -> GenerateEpisodesResponse {
+    func downloadBookPDF(bookId: Int) async throws -> Data {
+        guard let url = URL(string: "\(baseURL)/api/books/\(bookId)/pdf") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 120
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0, "PDF download failed")
+        }
+        return data
+    }
+
+    func generateEpisodes(bookId: Int, mode: String, chapters: [Int]? = nil, pageStart: Int? = nil, pageEnd: Int? = nil) async throws -> GenerateEpisodesResponse {
         var body: [String: Any] = ["mode": mode]
         if let chapters { body["chapters"] = chapters }
+        if let pageStart, let pageEnd {
+            body["page_range"] = ["start": pageStart, "end": pageEnd]
+        }
         return try await post("/api/books/\(bookId)/episodes", body: body)
     }
 

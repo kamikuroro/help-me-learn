@@ -4,6 +4,7 @@ import Foundation
 final class BooksViewModel {
     var books: [Book] = []
     var isLoading = false
+    var isUploading = false
     var error: String?
 
     func loadBooks() async {
@@ -15,6 +16,18 @@ final class BooksViewModel {
             self.error = error.localizedDescription
         }
         isLoading = false
+    }
+
+    func uploadBook(pdfData: Data, filename: String, title: String?, author: String?) async {
+        isUploading = true
+        error = nil
+        do {
+            _ = try await APIClient.shared.uploadBook(pdfData: pdfData, filename: filename, title: title, author: author)
+            await loadBooks()
+        } catch {
+            self.error = error.localizedDescription
+        }
+        isUploading = false
     }
 
     func deleteBook(_ book: Book) async {
@@ -55,12 +68,11 @@ final class BookDetailViewModel {
         isLoading = false
     }
 
-    func generateEpisodes(mode: String, chapters: [Int]? = nil) async {
+    func generateEpisodes(mode: String, chapters: [Int]? = nil, pageStart: Int? = nil, pageEnd: Int? = nil) async {
         isGenerating = true
         error = nil
         do {
-            _ = try await APIClient.shared.generateEpisodes(bookId: bookId, mode: mode, chapters: chapters)
-            // Reload episodes to reflect new pending ones
+            _ = try await APIClient.shared.generateEpisodes(bookId: bookId, mode: mode, chapters: chapters, pageStart: pageStart, pageEnd: pageEnd)
             episodes = try await APIClient.shared.listEpisodes(bookId: bookId)
         } catch {
             self.error = error.localizedDescription
@@ -78,6 +90,6 @@ final class BookDetailViewModel {
     }
 
     func episodesForChapter(_ chapterId: Int) -> [PodcastEpisode] {
-        episodes.filter { $0.chapterId == chapterId }
+        episodes.filter { $0.chapterId != nil && $0.chapterId == chapterId }
     }
 }
