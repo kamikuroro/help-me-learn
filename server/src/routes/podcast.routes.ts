@@ -223,7 +223,7 @@ router.post('/books/:id/episodes', async (req: Request, res: Response) => {
     let chapters: { id: number; chapter_index: number }[];
     if (chapterIndices && chapterIndices.length > 0) {
       chapters = await queryMany<{ id: number; chapter_index: number }>(
-        'SELECT id, chapter_index FROM book_chapters WHERE book_id = $1 AND chapter_index = ANY($2) ORDER BY chapter_index',
+        'SELECT id, chapter_index FROM book_chapters WHERE book_id = $1 AND id = ANY($2) ORDER BY chapter_index',
         [bookId, chapterIndices],
       );
     } else {
